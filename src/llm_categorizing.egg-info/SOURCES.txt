@@ -1,0 +1,15 @@
+README.md
+pyproject.toml
+src/llm_categorizing/__init__.py
+src/llm_categorizing/classifier.py
+src/llm_categorizing/cli.py
+src/llm_categorizing/config.py
+src/llm_categorizing/models.py
+src/llm_categorizing/prompts.py
+src/llm_categorizing/taxonomy.py
+src/llm_categorizing.egg-info/PKG-INFO
+src/llm_categorizing.egg-info/SOURCES.txt
+src/llm_categorizing.egg-info/dependency_links.txt
+src/llm_categorizing.egg-info/requires.txt
+src/llm_categorizing.egg-info/top_level.txt
+tests/test_taxonomy.py

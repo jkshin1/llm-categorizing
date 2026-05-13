@@ -1,0 +1,6 @@
+중직무,소직무,Device,단위 직무,세부 직무1,세부 직무2
+소자,Process Integration,Memory,공정통합,DRAM PI,Cell
+소자,Process Integration,Memory,공정통합,NAND PI,Array
+소자,Device,Logic,소자개발,Device Characterization,Reliability
+설계,Circuit,Memory,회로설계,Sense Amp,Timing
+품질,Quality,Common,불량분석,Failure Analysis,Root Cause

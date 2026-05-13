@@ -1,0 +1,3 @@
+year,team,emp_num,name,self_review
+2025,PI팀,E0001,홍길동,"DRAM cell 공정 조건 변경 후 수율 저하 원인을 분석하고 integration split 평가를 수행했습니다."
+2025,품질분석팀,E0002,김영희,"고객 불량 샘플의 failure signature를 분석하고 root cause와 containment action을 정리했습니다."
