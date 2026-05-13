@@ -21,13 +21,30 @@ from llm_categorizing.taxonomy import (
 )
 
 
+DEFAULT_INPUT_PATH = "data/input/employees.csv"
+DEFAULT_TAXONOMY_PATH = "data/input/taxonomy.csv"
+DEFAULT_OUTPUT_PATH = "data/output/classified_jobs.csv"
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Classify employee self-review rows into a fixed job taxonomy."
     )
-    parser.add_argument("--input", required=True, help="구성원 CSV 경로")
-    parser.add_argument("--taxonomy", required=True, help="직무 taxonomy CSV 경로")
-    parser.add_argument("--output", required=True, help="분류 결과 CSV 경로")
+    parser.add_argument(
+        "--input",
+        default=DEFAULT_INPUT_PATH,
+        help=f"구성원 CSV 경로. 기본값: {DEFAULT_INPUT_PATH}",
+    )
+    parser.add_argument(
+        "--taxonomy",
+        default=DEFAULT_TAXONOMY_PATH,
+        help=f"직무 taxonomy CSV 경로. 기본값: {DEFAULT_TAXONOMY_PATH}",
+    )
+    parser.add_argument(
+        "--output",
+        default=DEFAULT_OUTPUT_PATH,
+        help=f"분류 결과 CSV 경로. 기본값: {DEFAULT_OUTPUT_PATH}",
+    )
     parser.add_argument("--encoding", default="utf-8-sig", help="입력 CSV 기본 인코딩")
     parser.add_argument("--limit", type=int, default=0, help="앞에서 N개 행만 처리")
     parser.add_argument("--validate-only", action="store_true", help="스키마만 검증하고 종료")

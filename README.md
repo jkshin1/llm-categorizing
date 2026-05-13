@@ -40,33 +40,41 @@ INTERNAL_LLM_MODEL=your-internal-model-name
 
 ## 실행
 
+기본 경로:
+
+```text
+구성원 CSV: data/input/employees.csv
+직무 taxonomy CSV: data/input/taxonomy.csv
+분류 결과 CSV: data/output/classified_jobs.csv
+```
+
+위 경로에 파일을 두면 경로 인자 없이 실행할 수 있습니다.
+
 스키마와 taxonomy만 검증:
 
 ```bat
-python classify_jobs.py ^
-  --input examples\employees_sample.csv ^
-  --taxonomy examples\taxonomy_sample.csv ^
-  --output data\output\classified_jobs.csv ^
-  --validate-only
+python classify_jobs.py --validate-only
 ```
 
 실제 분류:
 
 ```bat
-python classify_jobs.py ^
-  --input data\input\employees.csv ^
-  --taxonomy data\input\taxonomy.csv ^
-  --output data\output\classified_jobs.csv
+python classify_jobs.py
 ```
 
 처음에는 일부 행만 테스트하는 것을 권장합니다.
 
 ```bat
+python classify_jobs.py --limit 20 --output data\output\classified_jobs_sample.csv
+```
+
+다른 경로를 써야 할 때만 인자로 덮어쓰면 됩니다.
+
+```bat
 python classify_jobs.py ^
-  --input data\input\employees.csv ^
-  --taxonomy data\input\taxonomy.csv ^
-  --output data\output\classified_jobs_sample.csv ^
-  --limit 20
+  --input examples\employees_sample.csv ^
+  --taxonomy examples\taxonomy_sample.csv ^
+  --output data\output\classified_jobs_sample.csv
 ```
 
 ## 개인정보 처리 기준
