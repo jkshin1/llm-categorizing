@@ -53,10 +53,23 @@ Qwen3/Qwen3.6 계열 모델은 thinking mode 때문에 OpenAI-compatible API의 
 LLM_QWEN_DISABLE_THINKING=1
 ```
 
+thinking mode를 켜려면 아래처럼 설정하세요. 이때 `LLM_MAX_TOKENS`를 비워두면 Qwen thinking용 기본값 `LLM_QWEN_THINKING_MAX_TOKENS=4096`을 사용합니다.
+
+```text
+LLM_QWEN_DISABLE_THINKING=0
+LLM_QWEN_THINKING_MAX_TOKENS=4096
+```
+
+그래도 최종 JSON이 비면 thinking 토큰이 많이 소모된 것이므로 `8192`까지 올려 테스트하세요.
+
+```text
+LLM_QWEN_THINKING_MAX_TOKENS=8192
+```
+
 사내 endpoint가 Roo Code처럼 별도 body 옵션을 요구하면 `.env`에 JSON 객체로 추가할 수 있습니다.
 
 ```text
-LLM_EXTRA_BODY_JSON={"chat_template_kwargs":{"enable_thinking":false}}
+LLM_EXTRA_BODY_JSON={"chat_template_kwargs":{"enable_thinking":true}}
 ```
 
 ## 실행
