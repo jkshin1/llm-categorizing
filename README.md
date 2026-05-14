@@ -42,12 +42,21 @@ copy .env.example .env
 INTERNAL_LLM_BASE_URL=https://your-internal-llm-endpoint/v1
 INTERNAL_LLM_API_KEY=replace-me
 INTERNAL_LLM_MODEL=your-internal-model-name
+LLM_PROVIDER_PROFILE=auto
 LLM_TIMEOUT_SECONDS=300
 ```
 
 사내 endpoint가 OpenAI의 `response_format={"type":"json_object"}` 옵션을 지원하지 않으면 `LLM_USE_JSON_RESPONSE_FORMAT=0`을 유지하세요.
 
-Qwen3/Qwen3.6 계열 모델은 thinking mode 때문에 OpenAI-compatible API의 `message.content`가 빈 값으로 내려오는 경우가 있습니다. 이 프로젝트는 모델명에 `qwen`이 들어가면 기본적으로 아래 옵션을 요청 body에 추가합니다.
+`LLM_PROVIDER_PROFILE=auto`는 모델명에 따라 `qwen`, `glm`, `generic` 프로파일을 자동 선택합니다. 모델명이 사내 별칭이라 자동 인식이 어렵다면 직접 지정하세요.
+
+```text
+LLM_PROVIDER_PROFILE=qwen
+LLM_PROVIDER_PROFILE=glm
+LLM_PROVIDER_PROFILE=generic
+```
+
+Qwen3/Qwen3.6 계열 모델은 thinking mode 때문에 OpenAI-compatible API의 `message.content`가 빈 값으로 내려오는 경우가 있습니다. Qwen 프로파일은 기본적으로 아래 옵션을 요청 body에 추가합니다.
 
 ```text
 LLM_QWEN_DISABLE_THINKING=1
@@ -69,7 +78,14 @@ LLM_QWEN_THINKING_MAX_TOKENS=8192
 사내 endpoint가 Roo Code처럼 별도 body 옵션을 요구하면 `.env`에 JSON 객체로 추가할 수 있습니다.
 
 ```text
-LLM_EXTRA_BODY_JSON={"chat_template_kwargs":{"enable_thinking":true}}
+LLM_QWEN_EXTRA_BODY_JSON={"chat_template_kwargs":{"enable_thinking":true}}
+```
+
+GLM 계열은 Qwen 전용 extra body를 보내지 않습니다. GLM에 별도 옵션이 필요할 때만 GLM 전용 값을 넣으세요.
+
+```text
+LLM_GLM_MAX_TOKENS=2048
+LLM_GLM_EXTRA_BODY_JSON=
 ```
 
 ## 실행
