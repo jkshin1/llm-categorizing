@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
+from typing import Any
 from dataclasses import dataclass
 
 from dotenv import load_dotenv
@@ -25,6 +27,7 @@ class LLMSettings:
     timeout_seconds: float = DEFAULT_LLM_TIMEOUT_SECONDS
     max_tokens: int = 1200
     use_json_response_format: bool = False
+    extra_body: dict[str, Any] | None = None
 
     @classmethod
     def from_env(cls) -> "LLMSettings":
@@ -57,4 +60,28 @@ class LLMSettings:
             ),
             max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1200")),
             use_json_response_format=_env_bool("LLM_USE_JSON_RESPONSE_FORMAT", False),
+            extra_body=_extra_body_from_env(model),
         )
+
+
+def _extra_body_from_env(model: str) -> dict[str, Any] | None:
+    extra_body: dict[str, Any] = {}
+
+    raw_json = os.getenv("LLM_EXTRA_BODY_JSON", "").strip()
+    if raw_json:
+        parsed = json.loads(raw_json)
+        if not isinstance(parsed, dict):
+            raise ValueError("LLM_EXTRA_BODY_JSON must be a JSON object")
+        extra_body.update(parsed)
+
+    if _env_bool("LLM_QWEN_DISABLE_THINKING", _looks_like_qwen(model)):
+        chat_template_kwargs = extra_body.setdefault("chat_template_kwargs", {})
+        if not isinstance(chat_template_kwargs, dict):
+            raise ValueError("LLM_EXTRA_BODY_JSON.chat_template_kwargs must be a JSON object")
+        chat_template_kwargs.setdefault("enable_thinking", False)
+
+    return extra_body or None
+
+
+def _looks_like_qwen(model: str) -> bool:
+    return "qwen" in model.casefold()

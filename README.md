@@ -47,6 +47,18 @@ LLM_TIMEOUT_SECONDS=300
 
 사내 endpoint가 OpenAI의 `response_format={"type":"json_object"}` 옵션을 지원하지 않으면 `LLM_USE_JSON_RESPONSE_FORMAT=0`을 유지하세요.
 
+Qwen3/Qwen3.6 계열 모델은 thinking mode 때문에 OpenAI-compatible API의 `message.content`가 빈 값으로 내려오는 경우가 있습니다. 이 프로젝트는 모델명에 `qwen`이 들어가면 기본적으로 아래 옵션을 요청 body에 추가합니다.
+
+```text
+LLM_QWEN_DISABLE_THINKING=1
+```
+
+사내 endpoint가 Roo Code처럼 별도 body 옵션을 요구하면 `.env`에 JSON 객체로 추가할 수 있습니다.
+
+```text
+LLM_EXTRA_BODY_JSON={"chat_template_kwargs":{"enable_thinking":false}}
+```
+
 ## 실행
 
 기본 경로:

@@ -581,6 +581,8 @@ class OpenAICompatibleJobClassifier:
         }
         if self.settings.use_json_response_format:
             payload["response_format"] = {"type": "json_object"}
+        if self.settings.extra_body:
+            payload["extra_body"] = self.settings.extra_body
 
         for attempt in Retrying(
             stop=stop_after_attempt(self.config.api_retry_attempts),
@@ -590,11 +592,26 @@ class OpenAICompatibleJobClassifier:
         ):
             with attempt:
                 completion = self.client.chat.completions.create(**payload)
-                content = completion.choices[0].message.content
+                choice = completion.choices[0]
+                content = choice.message.content
                 if not content:
-                    raise ValueError("empty LLM response")
+                    raise ValueError(self._empty_response_error(choice))
                 return content
         raise RuntimeError("unreachable retry state")
+
+    def _empty_response_error(self, choice: Any) -> str:
+        message = choice.message
+        finish_reason = getattr(choice, "finish_reason", None)
+        message_dump = message.model_dump() if hasattr(message, "model_dump") else {}
+        extra_keys = sorted(
+            key
+            for key, value in message_dump.items()
+            if value not in (None, "", [], {})
+        )
+        return (
+            "empty LLM response"
+            f" (finish_reason={finish_reason}, message_non_empty_keys={extra_keys})"
+        )
 
     def _cache_key(self, context_json: str) -> str:
         payload = {
