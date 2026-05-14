@@ -5,7 +5,7 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 import pandas as pd
 
@@ -114,6 +114,85 @@ class Taxonomy:
                 children.append(dict(row))
         return children
 
+    def major_jobs_for_unit_job(self, unit_job: object) -> list[str]:
+        wanted = normalize_key(unit_job)
+        if not wanted:
+            return []
+
+        result: list[str] = []
+        seen: set[str] = set()
+        for row in self.rows:
+            if normalize_key(row["단위 직무"]) != wanted:
+                continue
+            major_job = row["중직무"]
+            key = normalize_key(major_job)
+            if key in seen:
+                continue
+            seen.add(key)
+            result.append(major_job)
+        return result
+
+    def rows_for_unit_job(
+        self,
+        unit_job: object,
+        *,
+        major_job: object | None = None,
+        device: object | None = None,
+    ) -> list[dict[str, str]]:
+        wanted_unit = normalize_key(unit_job)
+        wanted_major = normalize_key(major_job) if major_job is not None else ""
+        wanted_device = normalize_key(device) if device is not None else ""
+        if not wanted_unit:
+            return []
+
+        result: list[dict[str, str]] = []
+        for row in self.rows:
+            if normalize_key(row["단위 직무"]) != wanted_unit:
+                continue
+            if wanted_major and normalize_key(row["중직무"]) != wanted_major:
+                continue
+            if wanted_device and normalize_key(row["Device"]) != wanted_device:
+                continue
+            result.append(dict(row))
+        return result
+
+    def ambiguous_unit_jobs_in_text(self, text: object) -> list[dict[str, Any]]:
+        text_key = normalize_key(text)
+        if not text_key:
+            return []
+
+        result: list[dict[str, Any]] = []
+        seen_units: set[str] = set()
+        for row in self.rows:
+            unit_job = row["단위 직무"]
+            unit_key = normalize_key(unit_job)
+            if len(unit_key) < 2 or unit_key in seen_units or unit_key not in text_key:
+                continue
+
+            major_jobs = self.major_jobs_for_unit_job(unit_job)
+            if len(major_jobs) > 1:
+                result.append({"단위 직무": unit_job, "중복 중직무": major_jobs})
+            seen_units.add(unit_key)
+        return result
+
+    def ambiguity_reason_for_row(self, row: dict[str, object]) -> str:
+        unit_job = normalize_cell(row.get("단위 직무", ""))
+        major_jobs = self.major_jobs_for_unit_job(unit_job)
+        if len(major_jobs) <= 1:
+            return ""
+        joined = ", ".join(major_jobs)
+        return f"단위 직무 '{unit_job}'이 여러 중직무({joined})에 존재하므로 self_review의 실제 업무 동사와 산출물 기준으로 검수 필요"
+
+    def annotate_candidates(self, rows: list[dict[str, str]]) -> list[dict[str, Any]]:
+        annotated: list[dict[str, Any]] = []
+        for row in rows:
+            item: dict[str, Any] = dict(row)
+            ambiguity_reason = self.ambiguity_reason_for_row(row)
+            if ambiguity_reason:
+                item["분류주의"] = ambiguity_reason
+            annotated.append(item)
+        return annotated
+
     def canonical_path(self, candidate: dict[str, object]) -> dict[str, str] | None:
         wanted = tuple(normalize_key(candidate.get(column, "")) for column in TAXONOMY_COLUMNS)
         for row in self.rows:
@@ -122,5 +201,5 @@ class Taxonomy:
                 return dict(row)
         return None
 
-    def format_candidates_json(self, rows: list[dict[str, str]]) -> str:
+    def format_candidates_json(self, rows: list[dict[str, Any]]) -> str:
         return json.dumps(rows, ensure_ascii=False, indent=2)

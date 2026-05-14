@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from dotenv import load_dotenv
 
 
+DEFAULT_LLM_TIMEOUT_SECONDS = 300.0
+
+
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -19,7 +22,7 @@ class LLMSettings:
     api_key: str
     model: str
     temperature: float = 0.0
-    timeout_seconds: float = 60.0
+    timeout_seconds: float = DEFAULT_LLM_TIMEOUT_SECONDS
     max_tokens: int = 1200
     use_json_response_format: bool = False
 
@@ -49,7 +52,9 @@ class LLMSettings:
             api_key=api_key,
             model=model,
             temperature=float(os.getenv("LLM_TEMPERATURE", "0")),
-            timeout_seconds=float(os.getenv("LLM_TIMEOUT_SECONDS", "60")),
+            timeout_seconds=float(
+                os.getenv("LLM_TIMEOUT_SECONDS", str(int(DEFAULT_LLM_TIMEOUT_SECONDS)))
+            ),
             max_tokens=int(os.getenv("LLM_MAX_TOKENS", "1200")),
             use_json_response_format=_env_bool("LLM_USE_JSON_RESPONSE_FORMAT", False),
         )

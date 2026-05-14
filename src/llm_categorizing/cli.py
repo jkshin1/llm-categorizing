@@ -12,6 +12,11 @@ from llm_categorizing.classifier import (
     OpenAICompatibleJobClassifier,
 )
 from llm_categorizing.config import LLMSettings
+from llm_categorizing.diagnosis import (
+    diagnosis_key,
+    empty_diagnosis_output_payload,
+    load_diagnosis_contexts,
+)
 from llm_categorizing.taxonomy import (
     EMPLOYEE_COLUMNS,
     TAXONOMY_COLUMNS,
@@ -22,6 +27,7 @@ from llm_categorizing.taxonomy import (
 
 
 DEFAULT_INPUT_PATH = "data/input/employees.csv"
+DEFAULT_DIAGNOSIS_PATH = "data/input/diagnosis.csv"
 DEFAULT_TAXONOMY_PATH = "data/input/taxonomy.csv"
 DEFAULT_OUTPUT_PATH = "data/output/classified_jobs.csv"
 
@@ -41,6 +47,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"직무 taxonomy CSV 경로. 기본값: {DEFAULT_TAXONOMY_PATH}",
     )
     parser.add_argument(
+        "--diagnosis",
+        default=DEFAULT_DIAGNOSIS_PATH,
+        help=f"직무/스킬셋 진단 CSV 경로. 파일이 있으면 자동 사용. 기본값: {DEFAULT_DIAGNOSIS_PATH}",
+    )
+    parser.add_argument(
+        "--no-diagnosis",
+        action="store_true",
+        help="진단 CSV를 사용하지 않고 self_review만으로 분류",
+    )
+    parser.add_argument(
         "--output",
         default=DEFAULT_OUTPUT_PATH,
         help=f"분류 결과 CSV 경로. 기본값: {DEFAULT_OUTPUT_PATH}",
@@ -49,9 +65,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit", type=int, default=0, help="앞에서 N개 행만 처리")
     parser.add_argument("--validate-only", action="store_true", help="스키마만 검증하고 종료")
     parser.add_argument(
+        "--include-team-in-prompt",
+        action="store_true",
+        help="LLM 프롬프트에 team 컬럼 포함. 연도별 팀 정보가 정확할 때만 사용",
+    )
+    parser.add_argument(
         "--exclude-team-from-prompt",
         action="store_true",
-        help="LLM 프롬프트에서 team 컬럼도 제외",
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--include-self-review-output",
@@ -64,9 +85,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="동일 입력 재호출 방지를 위한 JSONL cache 경로. 빈 문자열이면 비활성화",
     )
     parser.add_argument("--max-review-chars", type=int, default=12000)
+    parser.add_argument("--max-diagnosis-rows-per-employee", type=int, default=50)
     parser.add_argument("--max-candidates-per-prompt", type=int, default=300)
     parser.add_argument("--validation-attempts", type=int, default=2)
-    parser.add_argument("--api-retry-attempts", type=int, default=3)
+    parser.add_argument("--api-retry-attempts", type=int, default=5)
     parser.add_argument("--confidence-review-threshold", type=float, default=0.6)
     return parser
 
@@ -77,13 +99,24 @@ def main(argv: list[str] | None = None) -> int:
     employees = read_csv_with_fallback(args.input, encoding=args.encoding)
     require_columns(employees, EMPLOYEE_COLUMNS, "employee CSV")
     taxonomy = Taxonomy.from_csv(args.taxonomy, encoding=args.encoding)
+    diagnosis_contexts = {}
+    diagnosis_path = Path(args.diagnosis)
+    if not args.no_diagnosis and diagnosis_path.exists():
+        diagnosis_contexts = load_diagnosis_contexts(
+            diagnosis_path,
+            encoding=args.encoding,
+            max_evidence_rows=args.max_diagnosis_rows_per_employee,
+        )
+    elif not args.no_diagnosis:
+        print(f"Diagnosis CSV not found. Skipping diagnosis context: {diagnosis_path}")
 
     if args.limit > 0:
         employees = employees.head(args.limit).copy()
 
     print(
         f"Loaded employees={len(employees)}, taxonomy_rows={len(taxonomy.rows)}, "
-        f"taxonomy_pairs={len(taxonomy.pairs())}, taxonomy_version={taxonomy.version_hash()}"
+        f"taxonomy_pairs={len(taxonomy.pairs())}, diagnosis_keys={len(diagnosis_contexts)}, "
+        f"taxonomy_version={taxonomy.version_hash()}"
     )
 
     if args.validate_only:
@@ -92,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
 
     settings = LLMSettings.from_env()
     config = ClassificationConfig(
-        include_team_in_prompt=not args.exclude_team_from_prompt,
+        include_team_in_prompt=args.include_team_in_prompt and not args.exclude_team_from_prompt,
         max_review_chars=args.max_review_chars,
         max_candidates_per_prompt=args.max_candidates_per_prompt,
         validation_attempts=args.validation_attempts,
@@ -111,7 +144,8 @@ def main(argv: list[str] | None = None) -> int:
     total = len(employees)
     for index, raw_row in employees.iterrows():
         row = {column: raw_row.get(column, "") for column in EMPLOYEE_COLUMNS}
-        result = classifier.classify_row(row)
+        diagnosis_context = diagnosis_contexts.get(diagnosis_key(row.get("year", ""), row.get("emp_num", "")))
+        result = classifier.classify_row(row, diagnosis_context=diagnosis_context)
         output_rows.append(build_output_row(row, result, args.include_self_review_output))
 
         current = len(output_rows)
@@ -148,6 +182,12 @@ def build_output_row(
             "confidence": result.get("confidence", 0.0),
             "reason": result.get("reason", ""),
             "needs_review": result.get("needs_review", True),
+            "ambiguity_reason": result.get("ambiguity_reason", ""),
+            "guardrail_reason": result.get("guardrail_reason", ""),
+            **{
+                key: result.get(key, default)
+                for key, default in empty_diagnosis_output_payload().items()
+            },
             "error": result.get("error", ""),
             "input_truncated": result.get("input_truncated", False),
             "taxonomy_version": result.get("taxonomy_version", ""),

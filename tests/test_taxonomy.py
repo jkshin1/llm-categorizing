@@ -56,3 +56,37 @@ def test_canonical_path_returns_original_taxonomy_values() -> None:
     )
 
     assert result == taxonomy.rows[0]
+
+
+def test_taxonomy_marks_duplicate_unit_job_ambiguity() -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "소자",
+                "소직무": "Process Integration",
+                "Device": "DRAM",
+                "단위 직무": "MLM",
+                "세부 직무1": "Device",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "공정",
+                "소직무": "Module",
+                "Device": "DRAM",
+                "단위 직무": "MLM",
+                "세부 직무1": "Process",
+                "세부 직무2": "",
+            },
+        ]
+    )
+
+    assert taxonomy.major_jobs_for_unit_job("mlm") == ["소자", "공정"]
+    assert taxonomy.rows_for_unit_job("mlm", major_job="공정", device="dram") == [taxonomy.rows[1]]
+    assert taxonomy.ambiguous_unit_jobs_in_text("MLM Module 기술적 지원") == [
+        {"단위 직무": "MLM", "중복 중직무": ["소자", "공정"]}
+    ]
+
+    annotated = taxonomy.annotate_candidates(taxonomy.rows)
+
+    assert "분류주의" in annotated[0]
+    assert "여러 중직무" in annotated[0]["분류주의"]

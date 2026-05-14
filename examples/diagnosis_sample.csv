@@ -1,0 +1,4 @@
+year,emp_num,name,team,진단 시 직무명,Category,항목
+2025,E0001,홍길동,DRAM공정 > DPC,Etch공정,CLN,Chamber clean
+2025,E0001,홍길동,DRAM공정 > DPC,Etch공정,MLM,Via scheme
+2025,E0002,김영희,품질분석팀,불량분석,Failure Analysis,Root cause
