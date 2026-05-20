@@ -1,0 +1,11 @@
+Slide 3:
+- Subtitle updated to explain that the slide now shows prompt-level clue extraction.
+- Card 2 changed from generic "실제 수행 업무 우선" guidance to concrete clue categories: verbs, outputs, validation activities.
+- Card 3 changed from generic product-name warning to an example decision rule: product names are context, while Qual/evaluation/Flow/condition-change evidence pushes the model toward process candidates.
+- Card body font size reduced slightly on edited cards to keep the existing card geometry.
+
+Slide 1:
+- Output CSV section now explains the individual review/evidence columns instead of only listing names.
+- "검수 판단" defines needs_review, confidence, and ambiguity_reason.
+- "설명 근거" defines reason, guardrail_reason, and diagnosis_* summary fields.
+- Output panel and privacy/footer strip were slightly resized to keep the expanded copy readable.

@@ -1,0 +1,1901 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/2x4nap4r",
+    "id": "2x4nap4r",
+    "slide": 2,
+    "layoutId": "/ppt/slideLayouts/slideLayout4.xml",
+    "layoutName": "Blank",
+    "layoutType": "blank",
+    "masterLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1536,
+      "height": 864
+    }
+  },
+  "theme": {
+    "colorSchemeName": "Office",
+    "colors": {
+      "accent1": "#2563EB",
+      "accent2": "#10B981",
+      "accent3": "#8B5CF6",
+      "accent4": "#F59E0B",
+      "accent5": "#EF4444",
+      "accent6": "#06B6D4",
+      "dk1": "#0F172A",
+      "lt1": "#F1F5F9",
+      "dk2": "#334155",
+      "lt2": "#E2E8F0",
+      "hlink": "#0000FF",
+      "folHlink": "#800080"
+    },
+    "typefaces": [
+      "+mn-lt"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "/ppt/slideLayouts/slideLayout4.xml",
+      "name": "Blank",
+      "type": "blank",
+      "parentLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+      "elements": [
+        {
+          "order": 1,
+          "kind": "shape",
+          "scope": "layout",
+          "aid": "template/layout//ppt/slideLayouts/slideLayout4.xml/2",
+          "id": "2",
+          "name": "Date Placeholder 1",
+          "bbox": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "order": 2,
+          "kind": "shape",
+          "scope": "layout",
+          "aid": "template/layout//ppt/slideLayouts/slideLayout4.xml/3",
+          "id": "3",
+          "name": "Footer Placeholder 2",
+          "bbox": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "scope": "master",
+      "id": "/ppt/slideMasters/slideMaster1.xml",
+      "type": "master",
+      "backgroundColor": "#F1F5F9",
+      "elements": [
+        {
+          "order": 1,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/2",
+          "id": "2",
+          "name": "Title Placeholder 1",
+          "bbox": [
+            48,
+            28.83,
+            864,
+            120
+          ],
+          "geometry": "rect"
+        },
+        {
+          "order": 2,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/3",
+          "id": "3",
+          "name": "Text Placeholder 2",
+          "bbox": [
+            48,
+            168,
+            864,
+            475.17
+          ],
+          "geometry": "rect"
+        },
+        {
+          "order": 3,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/4",
+          "id": "4",
+          "name": "Date Placeholder 3",
+          "bbox": [
+            48,
+            667.33,
+            224,
+            38.33
+          ],
+          "geometry": "rect"
+        },
+        {
+          "order": 4,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/5",
+          "id": "5",
+          "name": "Footer Placeholder 4",
+          "bbox": [
+            328,
+            667.33,
+            304,
+            38.33
+          ],
+          "geometry": "rect"
+        },
+        {
+          "order": 5,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/6",
+          "id": "6",
+          "name": "Slide Number Placeholder 5",
+          "bbox": [
+            688,
+            667.33,
+            224,
+            38.33
+          ],
+          "geometry": "rect"
+        }
+      ]
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/b6xkf6dc",
+      "id": "100",
+      "name": "Badge",
+      "bbox": [
+        64,
+        50.67,
+        160,
+        42.67
+      ],
+      "geometry": "roundRect",
+      "text": "01  데이터 구조",
+      "textPreview": "01  데이터 구조",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "01  데이터 구조"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "01  데이터 구조",
+          "runs": [
+            {
+              "index": 1,
+              "text": "01  데이터 구조",
+              "fontSize": 16,
+              "color": "#FFFFFF",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "#2563EB"
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/il0rqd4v",
+      "id": "101",
+      "name": "Title",
+      "bbox": [
+        64,
+        109.33,
+        1408,
+        74.67
+      ],
+      "geometry": "rect",
+      "text": "입력 데이터와 최종 출력",
+      "textPreview": "입력 데이터와 최종 출력",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "입력 데이터와 최종 출력"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "입력 데이터와 최종 출력",
+          "runs": [
+            {
+              "index": 1,
+              "text": "입력 데이터와 최종 출력",
+              "fontSize": 42.67,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/tcj6tova",
+      "id": "102",
+      "name": "Subtitle",
+      "bbox": [
+        64,
+        189.33,
+        1408,
+        40
+      ],
+      "geometry": "rect",
+      "text": "HI-Feedback과 직무전문성 진단 근거를 묶고, 결과는 사내 직무 taxonomy 기준으로만 저장합니다.",
+      "textPreview": "HI-Feedback과 직무전문성 진단 근거를 묶고, 결과는 사내 직무 taxonomy 기준으로만 저장합니다.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "HI-Feedback과 직무전문성 진단 근거를 묶고, 결과는 사내 직무 taxonomy 기준으로만 저장합니다."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "HI-Feedback과 직무전문성 진단 근거를 묶고, 결과는 사내 직무 taxonomy 기준으로만 저장합니다.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "HI-Feedback과 직무전문성 진단 근거를 묶고, 결과는 사내 직무 taxonomy 기준으로만 저장합니다.",
+              "fontSize": 20,
+              "color": "#475569"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0rqd4vmt",
+      "id": "103",
+      "name": "Card1",
+      "bbox": [
+        64,
+        261.33,
+        448,
+        293.33
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#FFFFFF",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/byhgn29g",
+      "id": "104",
+      "name": "Card1Bar",
+      "bbox": [
+        64,
+        261.33,
+        448,
+        6.67
+      ],
+      "geometry": "rect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#2563EB"
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/idonyd0z",
+      "id": "105",
+      "name": "Card1Tag",
+      "bbox": [
+        88,
+        288,
+        80,
+        32
+      ],
+      "geometry": "roundRect",
+      "text": "입력 1",
+      "textPreview": "입력 1",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "입력 1"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "입력 1",
+          "runs": [
+            {
+              "index": 1,
+              "text": "입력 1",
+              "fontSize": 14.67,
+              "color": "#1D4ED8",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "#DBEAFE"
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/t47y1kre",
+      "id": "106",
+      "name": "Card1Title",
+      "bbox": [
+        88,
+        330.67,
+        400,
+        40
+      ],
+      "geometry": "rect",
+      "text": "HI-Feedback 셀프리뷰",
+      "textPreview": "HI-Feedback 셀프리뷰",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "HI-Feedback 셀프리뷰"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "HI-Feedback 셀프리뷰",
+          "runs": [
+            {
+              "index": 1,
+              "text": "HI-Feedback 셀프리뷰",
+              "fontSize": 26.67,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0je9cvix",
+      "id": "107",
+      "name": "Card1Desc",
+      "bbox": [
+        88,
+        376,
+        400,
+        32
+      ],
+      "geometry": "rect",
+      "text": "구성원이 실제 수행했다고 작성한 업무 내용",
+      "textPreview": "구성원이 실제 수행했다고 작성한 업무 내용",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "구성원이 실제 수행했다고 작성한 업무 내용"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "구성원이 실제 수행했다고 작성한 업무 내용",
+          "runs": [
+            {
+              "index": 1,
+              "text": "구성원이 실제 수행했다고 작성한 업무 내용",
+              "fontSize": 18.67,
+              "color": "#64748B"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/bulwval8",
+      "id": "108",
+      "name": "Card1List",
+      "bbox": [
+        88,
+        418.67,
+        400,
+        120
+      ],
+      "geometry": "rect",
+      "text": "year\nteam (입력에는 존재, 기본 분류 판단에는 미사용)\nemp_num / name\nself_review",
+      "textPreview": "year | team (입력에는 존재, 기본 분류 판단에는 미사용) | emp_num / name | self_review",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 8,
+        "lines": [
+          {
+            "index": 1,
+            "text": "• year"
+          },
+          {
+            "index": 2,
+            "text": ""
+          },
+          {
+            "index": 3,
+            "text": "• team (입력에는 존재, 기본 분류 판단에는"
+          },
+          {
+            "index": 4,
+            "text": "미사용)"
+          },
+          {
+            "index": 5,
+            "text": ""
+          },
+          {
+            "index": 6,
+            "text": "• emp_num / name"
+          },
+          {
+            "index": 7,
+            "text": ""
+          },
+          {
+            "index": 8,
+            "text": "• self_review"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "year",
+          "runs": [
+            {
+              "index": 1,
+              "text": "year",
+              "fontSize": 20,
+              "color": "#0F172A"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "text": "team (입력에는 존재, 기본 분류 판단에는 미사용)",
+          "runs": [
+            {
+              "index": 1,
+              "text": "team (입력에는 존재, 기본 분류 판단에는 미사용)",
+              "fontSize": 20,
+              "color": "#0F172A"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "text": "emp_num / name",
+          "runs": [
+            {
+              "index": 1,
+              "text": "emp_num / name",
+              "fontSize": 20,
+              "color": "#0F172A"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "text": "self_review",
+          "runs": [
+            {
+              "index": 1,
+              "text": "self_review",
+              "fontSize": 20,
+              "color": "#0F172A"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/i9s36hcr",
+      "id": "109",
+      "name": "Card2",
+      "bbox": [
+        544,
+        261.33,
+        448,
+        293.33
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#FFFFFF",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/w3m94fu1",
+      "id": "110",
+      "name": "Card2Bar",
+      "bbox": [
+        544,
+        261.33,
+        448,
+        6.67
+      ],
+      "geometry": "rect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#10B981"
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/loj2t83i",
+      "id": "111",
+      "name": "Card2Tag",
+      "bbox": [
+        568,
+        288,
+        80,
+        32
+      ],
+      "geometry": "roundRect",
+      "text": "입력 2",
+      "textPreview": "입력 2",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "입력 2"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "입력 2",
+          "runs": [
+            {
+              "index": 1,
+              "text": "입력 2",
+              "fontSize": 14.67,
+              "color": "#047857",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "#D1FAE5"
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ex0nuxc3",
+      "id": "112",
+      "name": "Card2Title",
+      "bbox": [
+        568,
+        330.67,
+        400,
+        40
+      ],
+      "geometry": "rect",
+      "text": "직무전문성 진단",
+      "textPreview": "직무전문성 진단",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "직무전문성 진단"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "직무전문성 진단",
+          "runs": [
+            {
+              "index": 1,
+              "text": "직무전문성 진단",
+              "fontSize": 26.67,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/3itgfmlk",
+      "id": "113",
+      "name": "Card2Desc",
+      "bbox": [
+        568,
+        376,
+        400,
+        32
+      ],
+      "geometry": "rect",
+      "text": "진단 당시 직무명·스킬셋을 보조 근거로 활용",
+      "textPreview": "진단 당시 직무명·스킬셋을 보조 근거로 활용",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "진단 당시 직무명·스킬셋을 보조 근거로 활용"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "진단 당시 직무명·스킬셋을 보조 근거로 활용",
+          "runs": [
+            {
+              "index": 1,
+              "text": "진단 당시 직무명·스킬셋을 보조 근거로 활용",
+              "fontSize": 18.67,
+              "color": "#64748B"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wb2hwfyx",
+      "id": "114",
+      "name": "Card2List",
+      "bbox": [
+        568,
+        418.67,
+        400,
+        120
+      ],
+      "geometry": "rect",
+      "text": "team (예: DRAM공정 > DPC)\n진단 시 직무명\nCategory / 항목\nyear + emp_num 매칭",
+      "textPreview": "team (예: DRAM공정 > DPC) | 진단 시 직무명 | Category / 항목 | year + emp_num 매칭",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 7,
+        "lines": [
+          {
+            "index": 1,
+            "text": "• team (예: DRAM공정 > DPC)"
+          },
+          {
+            "index": 2,
+            "text": ""
+          },
+          {
+            "index": 3,
+            "text": "• 진단 시 직무명"
+          },
+          {
+            "index": 4,
+            "text": ""
+          },
+          {
+            "index": 5,
+            "text": "• Category / 항목"
+          },
+          {
+            "index": 6,
+            "text": ""
+          },
+          {
+            "index": 7,
+            "text": "• year + emp_num 매칭"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "team (예: DRAM공정 > DPC)",
+          "runs": [
+            {
+              "index": 1,
+              "text": "team (예: DRAM공정 > DPC)",
+              "fontSize": 20,
+              "color": "#0F172A"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "text": "진단 시 직무명",
+          "runs": [
+            {
+              "index": 1,
+              "text": "진단 시 직무명",
+              "fontSize": 20,
+              "color": "#0F172A"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "text": "Category / 항목",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Category / 항목",
+              "fontSize": 20,
+              "color": "#0F172A"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "text": "year + emp_num 매칭",
+          "runs": [
+            {
+              "index": 1,
+              "text": "year + emp_num 매칭",
+              "fontSize": 20,
+              "color": "#0F172A"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/lwval87e",
+      "id": "115",
+      "name": "Card3",
+      "bbox": [
+        1024,
+        261.33,
+        448,
+        293.33
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#FFFFFF",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/e9cvixcz",
+      "id": "116",
+      "name": "Card3Bar",
+      "bbox": [
+        1024,
+        261.33,
+        448,
+        6.67
+      ],
+      "geometry": "rect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#8B5CF6"
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/3q5o7qpg",
+      "id": "117",
+      "name": "Card3Tag",
+      "bbox": [
+        1048,
+        288,
+        80,
+        32
+      ],
+      "geometry": "roundRect",
+      "text": "후보",
+      "textPreview": "후보",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "후보"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "후보",
+          "runs": [
+            {
+              "index": 1,
+              "text": "후보",
+              "fontSize": 14.67,
+              "color": "#6D28D9",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "#EDE9FE"
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/sneloj2t",
+      "id": "118",
+      "name": "Card3Title",
+      "bbox": [
+        1048,
+        330.67,
+        400,
+        40
+      ],
+      "geometry": "rect",
+      "text": "사내 직무 taxonomy",
+      "textPreview": "사내 직무 taxonomy",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "사내 직무 taxonomy"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "사내 직무 taxonomy",
+          "runs": [
+            {
+              "index": 1,
+              "text": "사내 직무 taxonomy",
+              "fontSize": 26.67,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/l87ed8ba",
+      "id": "119",
+      "name": "Card3Desc",
+      "bbox": [
+        1048,
+        376,
+        400,
+        32
+      ],
+      "geometry": "rect",
+      "text": "LLM이 선택할 수 있는 정답 후보 목록",
+      "textPreview": "LLM이 선택할 수 있는 정답 후보 목록",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "LLM이 선택할 수 있는 정답 후보 목록"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "LLM이 선택할 수 있는 정답 후보 목록",
+          "runs": [
+            {
+              "index": 1,
+              "text": "LLM이 선택할 수 있는 정답 후보 목록",
+              "fontSize": 18.67,
+              "color": "#64748B"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 21,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/l0rqd4vm",
+      "id": "120",
+      "name": "Card3List",
+      "bbox": [
+        1048,
+        418.67,
+        400,
+        120
+      ],
+      "geometry": "rect",
+      "text": "중직무 / 소직무\nDevice / 단위 직무\n세부 직무1 / 세부 직무2",
+      "textPreview": "중직무 / 소직무 | Device / 단위 직무 | 세부 직무1 / 세부 직무2",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 5,
+        "lines": [
+          {
+            "index": 1,
+            "text": "• 중직무 / 소직무"
+          },
+          {
+            "index": 2,
+            "text": ""
+          },
+          {
+            "index": 3,
+            "text": "• Device / 단위 직무"
+          },
+          {
+            "index": 4,
+            "text": ""
+          },
+          {
+            "index": 5,
+            "text": "• 세부 직무1 / 세부 직무2"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "중직무 / 소직무",
+          "runs": [
+            {
+              "index": 1,
+              "text": "중직무 / 소직무",
+              "fontSize": 20,
+              "color": "#0F172A"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "text": "Device / 단위 직무",
+          "runs": [
+            {
+              "index": 1,
+              "text": "Device / 단위 직무",
+              "fontSize": 20,
+              "color": "#0F172A"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "text": "세부 직무1 / 세부 직무2",
+          "runs": [
+            {
+              "index": 1,
+              "text": "세부 직무1 / 세부 직무2",
+              "fontSize": 20,
+              "color": "#0F172A"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 22,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wfyxobm5",
+      "id": "121",
+      "name": "OutputPanel",
+      "bbox": [
+        64,
+        581.33,
+        1408,
+        220
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#FFFFFF",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 23,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7u54zido",
+      "id": "122",
+      "name": "OutTag",
+      "bbox": [
+        90.67,
+        605.33,
+        146.67,
+        34.67
+      ],
+      "geometry": "roundRect",
+      "text": "최종 출력 CSV",
+      "textPreview": "최종 출력 CSV",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "최종 출력 CSV"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "최종 출력 CSV",
+          "runs": [
+            {
+              "index": 1,
+              "text": "최종 출력 CSV",
+              "fontSize": 14.67,
+              "color": "#047857",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "#D1FAE5"
+    },
+    {
+      "order": 24,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ed8bat47",
+      "id": "123",
+      "name": "OutTitle",
+      "bbox": [
+        90.67,
+        648,
+        800,
+        37.33
+      ],
+      "geometry": "rect",
+      "text": "LLM이 추가/생성하는 데이터",
+      "textPreview": "LLM이 추가/생성하는 데이터",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "LLM이 추가/생성하는 데이터"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "LLM이 추가/생성하는 데이터",
+          "runs": [
+            {
+              "index": 1,
+              "text": "LLM이 추가/생성하는 데이터",
+              "fontSize": 24,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 25,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/lc7u54zi",
+      "id": "124",
+      "name": "Sub0",
+      "bbox": [
+        90.67,
+        692,
+        442.67,
+        92
+      ],
+      "geometry": "roundRect",
+      "text": "분류 결과\n중직무, 소직무 · Device, 단위 직무 · 세부 직무1, 세부 직무2",
+      "textPreview": "분류 결과 | 중직무, 소직무 · Device, 단위 직무 · 세부 직무1, 세부 직무2",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 3,
+        "lines": [
+          {
+            "index": 1,
+            "text": "분류 결과"
+          },
+          {
+            "index": 2,
+            "text": ""
+          },
+          {
+            "index": 3,
+            "text": "중직무, 소직무 · Device, 단위 직무 · 세부 직무1, 세부 직무2"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "분류 결과",
+          "runs": [
+            {
+              "index": 1,
+              "text": "분류 결과",
+              "fontSize": 18.67,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "text": "중직무, 소직무 · Device, 단위 직무 · 세부 직무1, 세부 직무2",
+          "runs": [
+            {
+              "index": 1,
+              "text": "중직무, 소직무 · Device, 단위 직무 · 세부 직무1, 세부 직무2",
+              "fontSize": 16,
+              "color": "#64748B"
+            }
+          ]
+        }
+      ],
+      "fillColor": "#F8FAFC",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 26,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wra5gbq1",
+      "id": "125",
+      "name": "Sub1",
+      "bbox": [
+        549.33,
+        692,
+        442.67,
+        92
+      ],
+      "geometry": "roundRect",
+      "text": "검수 판단\nneeds_review: True면 사람 검수\nconfidence: 확신도 0~1\nambiguity_reason: 중복·충돌 사유",
+      "textPreview": "검수 판단 | needs_review: True면 사람 검수 | confidence: 확신도 0~1 | ambiguity_reason: 중복·충돌 사유",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 7,
+        "lines": [
+          {
+            "index": 1,
+            "text": "검수 판단"
+          },
+          {
+            "index": 2,
+            "text": ""
+          },
+          {
+            "index": 3,
+            "text": "needs_review: True면 사람 검수"
+          },
+          {
+            "index": 4,
+            "text": ""
+          },
+          {
+            "index": 5,
+            "text": "confidence: 확신도 0~1"
+          },
+          {
+            "index": 6,
+            "text": ""
+          },
+          {
+            "index": 7,
+            "text": "ambiguity_reason: 중복·충돌 사유"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "검수 판단",
+          "runs": [
+            {
+              "index": 1,
+              "text": "검수 판단",
+              "fontSize": 14.67,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "text": "needs_review: True면 사람 검수",
+          "runs": [
+            {
+              "index": 1,
+              "text": "needs_review: ",
+              "fontSize": 12,
+              "color": "#0F172A",
+              "bold": true
+            },
+            {
+              "index": 2,
+              "text": "True면 사람 검수",
+              "fontSize": 12,
+              "color": "#64748B"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "text": "confidence: 확신도 0~1",
+          "runs": [
+            {
+              "index": 1,
+              "text": "confidence: ",
+              "fontSize": 12,
+              "color": "#0F172A",
+              "bold": true
+            },
+            {
+              "index": 2,
+              "text": "확신도 0~1",
+              "fontSize": 12,
+              "color": "#64748B"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "text": "ambiguity_reason: 중복·충돌 사유",
+          "runs": [
+            {
+              "index": 1,
+              "text": "ambiguity_reason: ",
+              "fontSize": 12,
+              "color": "#0F172A",
+              "bold": true
+            },
+            {
+              "index": 2,
+              "text": "중복·충돌 사유",
+              "fontSize": 12,
+              "color": "#64748B"
+            }
+          ]
+        }
+      ],
+      "fillColor": "#F8FAFC",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 27,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/36hcrmhk",
+      "id": "126",
+      "name": "Sub2",
+      "bbox": [
+        1008,
+        692,
+        442.67,
+        92
+      ],
+      "geometry": "roundRect",
+      "text": "설명 근거\nreason: LLM 선택 근거\nguardrail_reason: 보정·차단 사유\ndiagnosis_*: 진단 근거 요약",
+      "textPreview": "설명 근거 | reason: LLM 선택 근거 | guardrail_reason: 보정·차단 사유 | diagnosis_*: 진단 근거 요약",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 7,
+        "lines": [
+          {
+            "index": 1,
+            "text": "설명 근거"
+          },
+          {
+            "index": 2,
+            "text": ""
+          },
+          {
+            "index": 3,
+            "text": "reason: LLM 선택 근거"
+          },
+          {
+            "index": 4,
+            "text": ""
+          },
+          {
+            "index": 5,
+            "text": "guardrail_reason: 보정·차단 사유"
+          },
+          {
+            "index": 6,
+            "text": ""
+          },
+          {
+            "index": 7,
+            "text": "diagnosis_*: 진단 근거 요약"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "설명 근거",
+          "runs": [
+            {
+              "index": 1,
+              "text": "설명 근거",
+              "fontSize": 14.67,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "text": "reason: LLM 선택 근거",
+          "runs": [
+            {
+              "index": 1,
+              "text": "reason: ",
+              "fontSize": 12,
+              "color": "#0F172A",
+              "bold": true
+            },
+            {
+              "index": 2,
+              "text": "LLM 선택 근거",
+              "fontSize": 12,
+              "color": "#64748B"
+            }
+          ]
+        },
+        {
+          "index": 3,
+          "text": "guardrail_reason: 보정·차단 사유",
+          "runs": [
+            {
+              "index": 1,
+              "text": "guardrail_reason: ",
+              "fontSize": 12,
+              "color": "#0F172A",
+              "bold": true
+            },
+            {
+              "index": 2,
+              "text": "보정·차단 사유",
+              "fontSize": 12,
+              "color": "#64748B"
+            }
+          ]
+        },
+        {
+          "index": 4,
+          "text": "diagnosis_*: 진단 근거 요약",
+          "runs": [
+            {
+              "index": 1,
+              "text": "diagnosis_*: ",
+              "fontSize": 12,
+              "color": "#0F172A",
+              "bold": true
+            },
+            {
+              "index": 2,
+              "text": "진단 근거 요약",
+              "fontSize": 12,
+              "color": "#64748B"
+            }
+          ]
+        }
+      ],
+      "fillColor": "#F8FAFC",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1
+    },
+    {
+      "order": 28,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/eloj2t83",
+      "id": "127",
+      "name": "PrivacyBar",
+      "bbox": [
+        64,
+        807,
+        1408,
+        32
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#EFF6FF",
+      "lineColor": "#BFDBFE",
+      "lineWidth": 1
+    },
+    {
+      "order": 29,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/pg3ex0nu",
+      "id": "128",
+      "name": "PrivacyTag",
+      "bbox": [
+        90.67,
+        814,
+        173.33,
+        24
+      ],
+      "geometry": "roundRect",
+      "text": "개인정보 사용 원칙",
+      "textPreview": "개인정보 사용 원칙",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "개인정보 사용 원칙"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "개인정보 사용 원칙",
+          "runs": [
+            {
+              "index": 1,
+              "text": "개인정보 사용 원칙",
+              "fontSize": 14.67,
+              "color": "#1D4ED8",
+              "bold": true
+            }
+          ]
+        }
+      ],
+      "fillColor": "#DBEAFE"
+    },
+    {
+      "order": 30,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wval87ed",
+      "id": "129",
+      "name": "PrivacyText",
+      "bbox": [
+        280,
+        814,
+        1173.33,
+        24
+      ],
+      "geometry": "rect",
+      "text": "emp_num과 name은 입력·출력 재매칭용으로만 사용하고, LLM 판단 입력에서는 제외",
+      "textPreview": "emp_num과 name은 입력·출력 재매칭용으로만 사용하고, LLM 판단 입력에서는 제외",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "emp_num과 name은 입력·출력 재매칭용으로만 사용하고, LLM 판단 입력에서는 제외"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "emp_num과 name은 입력·출력 재매칭용으로만 사용하고, LLM 판단 입력에서는 제외",
+          "runs": [
+            {
+              "index": 1,
+              "text": "emp_num과 name은 입력·출력 재매칭용으로만 사용하고, LLM 판단 입력에서는 제외",
+              "fontSize": 17.33,
+              "color": "#1E3A8A"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 31,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6xkf6dcb",
+      "id": "130",
+      "name": "FooterLeft",
+      "bbox": [
+        64,
+        841.85,
+        266.67,
+        18
+      ],
+      "geometry": "rect",
+      "text": "데이터 구조",
+      "textPreview": "데이터 구조",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "데이터 구조"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "데이터 구조",
+          "runs": [
+            {
+              "index": 1,
+              "text": "데이터 구조",
+              "fontSize": 14.67,
+              "color": "#94A3B8"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 32,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/zed8v6ps",
+      "id": "131",
+      "name": "FooterRight",
+      "bbox": [
+        1386.67,
+        841.85,
+        85.33,
+        18
+      ],
+      "geometry": "rect",
+      "text": "1/4",
+      "textPreview": "1/4",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "1/4"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "1/4",
+          "runs": [
+            {
+              "index": 1,
+              "text": "1/4",
+              "fontSize": 14.67,
+              "color": "#94A3B8"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "composeRuns": []
+}

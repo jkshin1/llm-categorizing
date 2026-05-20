@@ -1,31 +1,12 @@
 from llm_categorizing.classifier import ClassificationConfig, OpenAICompatibleJobClassifier
 from llm_categorizing.config import LLMSettings
 from llm_categorizing.diagnosis import DiagnosisContext
+from llm_categorizing.knowledge import JobKnowledgeStore, KnowledgeDraft
 from llm_categorizing.taxonomy import Taxonomy
 
 
-def test_classifier_builds_process_and_ambiguity_hints_for_mlm_review() -> None:
-    taxonomy = Taxonomy.from_rows(
-        [
-            {
-                "중직무": "소자",
-                "소직무": "Process Integration",
-                "Device": "DRAM",
-                "단위 직무": "MLM",
-                "세부 직무1": "Device",
-                "세부 직무2": "",
-            },
-            {
-                "중직무": "공정",
-                "소직무": "Module",
-                "Device": "DRAM",
-                "단위 직무": "MLM",
-                "세부 직무1": "Process",
-                "세부 직무2": "",
-            },
-        ]
-    )
-    classifier = OpenAICompatibleJobClassifier(
+def _classifier(taxonomy: Taxonomy, knowledge_store: JobKnowledgeStore | None = None) -> OpenAICompatibleJobClassifier:
+    return OpenAICompatibleJobClassifier(
         settings=LLMSettings(
             base_url="http://localhost:1/v1",
             api_key="test",
@@ -33,67 +14,91 @@ def test_classifier_builds_process_and_ambiguity_hints_for_mlm_review() -> None:
         ),
         taxonomy=taxonomy,
         config=ClassificationConfig(),
+        knowledge_store=knowledge_store,
     )
 
-    hints = classifier._build_classification_hints(
-        "MLM Module 기술적 지원 및 Process Qual, Base Line 변경, DRAM 관련 검토"
-    )
 
-    assert any("공정 수행 근거" in hint for hint in hints)
-    assert any("여러 중직무" in hint for hint in hints)
-    assert any("DRAM 등 제품명" in hint for hint in hints)
-
-    corrected, reason = classifier._apply_process_guardrail(
-        taxonomy.rows[0],
-        "MLM Module 기술적 지원 및 Process Qual, Base Line 변경, DRAM 관련 검토",
-    )
-
-    assert corrected["중직무"] == "공정"
-    assert reason.startswith("process_guardrail:")
-
-
-def test_classifier_uses_diagnosis_guardrail_for_process_job() -> None:
+def test_classifier_does_not_build_hardcoded_rule_hints() -> None:
     taxonomy = Taxonomy.from_rows(
         [
             {
-                "중직무": "소자",
-                "소직무": "Process Integration",
-                "Device": "DRAM",
-                "단위 직무": "MLM",
-                "세부 직무1": "Device",
+                "중직무": "A",
+                "소직무": "A1",
+                "Device": "",
+                "단위 직무": "공통",
+                "세부 직무1": "",
                 "세부 직무2": "",
             },
             {
-                "중직무": "공정",
-                "소직무": "Etch공정",
-                "Device": "DRAM",
-                "단위 직무": "CLN",
-                "세부 직무1": "Etch",
+                "중직무": "B",
+                "소직무": "B1",
+                "Device": "",
+                "단위 직무": "공통",
+                "세부 직무1": "",
                 "세부 직무2": "",
             },
         ]
     )
-    classifier = OpenAICompatibleJobClassifier(
-        settings=LLMSettings(
-            base_url="http://localhost:1/v1",
-            api_key="test",
-            model="test",
-        ),
-        taxonomy=taxonomy,
-        config=ClassificationConfig(),
-    )
+    classifier = _classifier(taxonomy)
     diagnosis_context = DiagnosisContext(
         year="2025",
         emp_num="E0001",
-        row_count=2,
-        teams=["DRAM공정 > DPC"],
-        job_names=["Etch공정"],
-        categories=["CLN"],
-        items=["Chamber clean"],
+        row_count=1,
+        teams=["임의 팀"],
+        job_names=["임의 직무"],
+        categories=["임의 Category"],
+        items=["임의 항목"],
         evidence_rows=[],
     )
 
-    corrected, reason = classifier._apply_diagnosis_guardrail(taxonomy.rows[0], diagnosis_context)
+    hints = classifier._build_classification_hints(
+        "기존 코드에 있던 임의 키워드가 포함된 self_review",
+        diagnosis_context=diagnosis_context,
+    )
 
-    assert corrected == taxonomy.rows[1]
-    assert reason.startswith("diagnosis_guardrail:")
+    assert hints == []
+    assert not hasattr(classifier, "_apply_process_guardrail")
+    assert not hasattr(classifier, "_apply_diagnosis_guardrail")
+
+
+def test_classifier_uses_only_retrieved_user_knowledge_as_hints(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "A",
+                "소직무": "A1",
+                "Device": "",
+                "단위 직무": "Alpha",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "B",
+                "소직무": "B1",
+                "Device": "",
+                "단위 직무": "Beta",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "AlphaTask 표현은 A 후보 검토에 참고",
+        KnowledgeDraft(
+            title="AlphaTask 참고 지식",
+            aliases=["AlphaTask"],
+            hint="AlphaTask 표현이 있으면 A 후보를 검토한다.",
+            target_major_job="A",
+            priority=80,
+            confidence=0.8,
+        ),
+    )
+    classifier = _classifier(taxonomy, store)
+
+    knowledge_items = classifier._retrieve_knowledge("AlphaTask 수행", None)
+    hints = classifier._build_classification_hints("AlphaTask 수행", knowledge_items=knowledge_items)
+
+    assert [item.id for item in knowledge_items] == [entry.id]
+    assert len(hints) == 1
+    assert "AlphaTask 참고 지식" in hints[0]

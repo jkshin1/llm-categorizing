@@ -1,0 +1,56 @@
+{
+  "sourcePptx": "/Users/jk/Downloads/hi_feedback_job_classification_overview_image_deck.pptx",
+  "mapPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-prompt-example/presentations/job-classification-prompt-example/template-frame-map.json",
+  "output": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-prompt-example/presentations/job-classification-prompt-example/template-starter.pptx",
+  "outputBytes": 42662,
+  "sourceSlideCount": 4,
+  "slideCount": 4,
+  "previewDir": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-prompt-example/presentations/job-classification-prompt-example/template-starter-preview",
+  "layoutDir": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-prompt-example/presentations/job-classification-prompt-example/template-starter-layout",
+  "slides": [
+    {
+      "outputSlide": 1,
+      "sourceSlide": 1,
+      "narrativeRole": "opening thesis",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-prompt-example/presentations/job-classification-prompt-example/template-starter-preview/starter-slide-01.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-01.png",
+      "layoutPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-prompt-example/presentations/job-classification-prompt-example/template-starter-layout/starter-slide-01.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-01.layout.json"
+    },
+    {
+      "outputSlide": 2,
+      "sourceSlide": 2,
+      "narrativeRole": "data structure",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-prompt-example/presentations/job-classification-prompt-example/template-starter-preview/starter-slide-02.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-02.png",
+      "layoutPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-prompt-example/presentations/job-classification-prompt-example/template-starter-layout/starter-slide-02.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-02.layout.json"
+    },
+    {
+      "outputSlide": 3,
+      "sourceSlide": 3,
+      "narrativeRole": "judgment guide with prompt example",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 3,
+      "previewPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-prompt-example/presentations/job-classification-prompt-example/template-starter-preview/starter-slide-03.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-03.png",
+      "layoutPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-prompt-example/presentations/job-classification-prompt-example/template-starter-layout/starter-slide-03.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-03.layout.json"
+    },
+    {
+      "outputSlide": 4,
+      "sourceSlide": 4,
+      "narrativeRole": "expected effects",
+      "reuseMode": "duplicate-slide",
+      "editTargetCount": 0,
+      "previewPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-prompt-example/presentations/job-classification-prompt-example/template-starter-preview/starter-slide-04.png",
+      "previewRelativePath": "template-starter-preview/starter-slide-04.png",
+      "layoutPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-prompt-example/presentations/job-classification-prompt-example/template-starter-layout/starter-slide-04.layout.json",
+      "layoutRelativePath": "template-starter-layout/starter-slide-04.layout.json"
+    }
+  ]
+}

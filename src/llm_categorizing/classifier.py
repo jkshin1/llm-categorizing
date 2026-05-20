@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +13,7 @@ from tenacity import Retrying, retry_if_exception_type, stop_after_attempt, wait
 
 from llm_categorizing.config import LLMSettings
 from llm_categorizing.diagnosis import DiagnosisContext, empty_diagnosis_output_payload
+from llm_categorizing.knowledge import JobKnowledge, JobKnowledgeStore
 from llm_categorizing.models import FinalClassificationResult, Stage1Result
 from llm_categorizing.prompts import (
     PROMPT_VERSION,
@@ -21,31 +23,7 @@ from llm_categorizing.prompts import (
     stage1_user_prompt,
     stage2_user_prompt,
 )
-from llm_categorizing.taxonomy import TAXONOMY_COLUMNS, Taxonomy, normalize_cell, normalize_key
-
-
-PROCESS_EVIDENCE_TERMS = [
-    "Process Qual",
-    "Process Flow",
-    "Base Line",
-    "Baseline",
-    "Scheme",
-    "Via First",
-    "Via Last",
-    "Low-k",
-    "IMD",
-    "PLR",
-    "Reticle",
-    "MTS",
-    "단위공정",
-    "공정 조건",
-    "공정 평가",
-    "공정 Tuning",
-    "MLM Module",
-]
-
-DEVICE_CONTEXT_TERMS = ["DRAM", "NAND", "Logic", "Cell", "Lucy Base Line"]
-DIAGNOSIS_PROCESS_TERMS = ["공정", "Process", "Etch", "CLN", "CVD", "PVD", "Photo", "CMP", "Diff", "IMP"]
+from llm_categorizing.taxonomy import TAXONOMY_COLUMNS, Taxonomy, normalize_cell
 
 
 def extract_json_object(text: str) -> dict[str, Any]:
@@ -72,9 +50,17 @@ class ClassificationConfig:
     include_team_in_prompt: bool = False
     max_review_chars: int = 12000
     max_candidates_per_prompt: int = 300
+    max_knowledge_hints: int = 8
     validation_attempts: int = 2
     api_retry_attempts: int = 5
     confidence_review_threshold: float = 0.6
+
+
+@dataclass(frozen=True)
+class DiagnosisPriority:
+    major_job: str = ""
+    sub_job: str = ""
+    reason: str = ""
 
 
 class JsonlCache:
@@ -114,6 +100,7 @@ class OpenAICompatibleJobClassifier:
         taxonomy: Taxonomy,
         config: ClassificationConfig,
         cache: JsonlCache | None = None,
+        knowledge_store: JobKnowledgeStore | None = None,
     ) -> None:
         try:
             from openai import OpenAI
@@ -124,6 +111,7 @@ class OpenAICompatibleJobClassifier:
         self.taxonomy = taxonomy
         self.config = config
         self.cache = cache
+        self.knowledge_store = knowledge_store
         self.client = OpenAI(
             base_url=settings.base_url,
             api_key=settings.api_key,
@@ -141,14 +129,25 @@ class OpenAICompatibleJobClassifier:
         self,
         row: dict[str, Any],
         diagnosis_context: DiagnosisContext | None = None,
+        previous_year_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         review = normalize_cell(row.get("self_review", ""))
         if not review and not diagnosis_context:
-            return self._review_required_result("self_review is blank")
+            previous_year_payload = self._previous_year_prompt_payload(previous_year_context)
+            result = self._review_required_result("self_review is blank")
+            result.update(self._previous_year_output_payload(previous_year_payload))
+            return result
 
         truncated = len(review) > self.config.max_review_chars
         review_for_prompt = review[: self.config.max_review_chars] if truncated else review
-        classification_hints = self._build_classification_hints(review_for_prompt, diagnosis_context)
+        knowledge_items = self._retrieve_knowledge(review_for_prompt, diagnosis_context)
+        classification_hints = self._build_classification_hints(
+            review_for_prompt,
+            diagnosis_context,
+            knowledge_items,
+        )
+        diagnosis_priority = self._diagnosis_priority(diagnosis_context)
+        previous_year_payload = self._previous_year_prompt_payload(previous_year_context)
         context_json = employee_context(
             year=normalize_cell(row.get("year", "")),
             team=normalize_cell(row.get("team", "")),
@@ -157,6 +156,7 @@ class OpenAICompatibleJobClassifier:
             input_truncated=truncated,
             classification_hints=classification_hints,
             diagnosis_context=diagnosis_context.to_prompt_payload() if diagnosis_context else None,
+            previous_year_classification=previous_year_payload,
         )
 
         cache_key = self._cache_key(context_json)
@@ -166,7 +166,7 @@ class OpenAICompatibleJobClassifier:
                 return dict(cached)
 
         try:
-            result = self._classify_uncached(context_json, review_for_prompt, diagnosis_context)
+            result = self._classify_uncached(context_json, diagnosis_priority)
         except Exception as exc:
             result = self._review_required_result(f"classification_error: {exc}")
 
@@ -175,10 +175,21 @@ class OpenAICompatibleJobClassifier:
             if diagnosis_context
             else empty_diagnosis_output_payload()
         )
+        result["used_knowledge_ids"] = [item.id for item in knowledge_items]
+        result["used_knowledge_types"] = [item.knowledge_type for item in knowledge_items]
+        result["knowledge_version"] = self._knowledge_version()
+        result.setdefault("diagnosis_priority_reason", "")
+        result.update(self._previous_year_output_payload(previous_year_payload))
         result["input_truncated"] = truncated
         result["taxonomy_version"] = self.taxonomy.version_hash()
         result["model_name"] = self.settings.model
         result["classified_at"] = datetime.now(timezone.utc).isoformat()
+        if self.knowledge_store:
+            self.knowledge_store.record_usage(
+                classification_id=cache_key,
+                knowledge_items=knowledge_items,
+                result=result,
+            )
 
         if self.cache and not result.get("error"):
             self.cache.set(cache_key, result)
@@ -187,18 +198,29 @@ class OpenAICompatibleJobClassifier:
     def _classify_uncached(
         self,
         context_json: str,
-        review: str,
-        diagnosis_context: DiagnosisContext | None,
+        diagnosis_priority: DiagnosisPriority,
     ) -> dict[str, Any]:
-        stage1 = self._run_stage1(context_json)
-        pair = self.taxonomy.canonical_pair(stage1.major_job, stage1.sub_job)
-        if pair is None:
-            return self._review_required_result("stage1 result is not in taxonomy")
+        applied_priority_reasons: list[str] = []
+        pair_candidates, pair_priority_reason = self._diagnosis_pair_candidates(diagnosis_priority)
+        if pair_priority_reason:
+            applied_priority_reasons.append(pair_priority_reason)
+
+        if len(pair_candidates) == 1:
+            pair = pair_candidates[0]
+        else:
+            stage1 = self._run_stage1(context_json, pair_candidates)
+            pair = self.taxonomy.canonical_pair(stage1.major_job, stage1.sub_job)
+            if pair is None:
+                return self._review_required_result_with_diagnosis_priority(
+                    "stage1 result is not in taxonomy",
+                    applied_priority_reasons,
+                )
 
         candidates = self.taxonomy.children_for_pair(pair["중직무"], pair["소직무"])
         if len(candidates) > self.config.max_candidates_per_prompt:
-            return self._review_required_result(
-                f"too many final candidates under selected pair: {len(candidates)}"
+            return self._review_required_result_with_diagnosis_priority(
+                f"too many final candidates under selected pair: {len(candidates)}",
+                applied_priority_reasons,
             )
 
         final = self._run_stage2(context_json, candidates)
@@ -212,32 +234,33 @@ class OpenAICompatibleJobClassifier:
         }
         canonical = self._canonical_from_candidates(candidate, candidates)
         if canonical is None:
-            return self._review_required_result("final result is not in taxonomy")
+            return self._review_required_result_with_diagnosis_priority(
+                "final result is not in taxonomy",
+                applied_priority_reasons,
+            )
 
-        canonical, guardrail_reason = self._apply_diagnosis_guardrail(canonical, diagnosis_context)
-        if not guardrail_reason:
-            canonical, guardrail_reason = self._apply_process_guardrail(canonical, review)
-        ambiguity_reason = self.taxonomy.ambiguity_reason_for_row(canonical)
         needs_review = (
             final.needs_review
             or final.confidence < self.config.confidence_review_threshold
-            or bool(ambiguity_reason)
         )
-        reason = final.reason
-        if guardrail_reason:
-            reason = f"{reason} | {guardrail_reason}" if reason else guardrail_reason
         return {
             **canonical,
             "confidence": final.confidence,
-            "reason": reason,
+            "reason": final.reason,
             "needs_review": needs_review,
-            "ambiguity_reason": ambiguity_reason,
-            "guardrail_reason": guardrail_reason,
+            "ambiguity_reason": "",
+            "guardrail_reason": "",
+            "diagnosis_priority_reason": "; ".join(applied_priority_reasons),
             "error": "",
         }
 
-    def _run_stage1(self, context_json: str) -> Stage1Result:
-        candidates_json = self.taxonomy.format_candidates_json(self.taxonomy.pairs())
+    def _run_stage1(
+        self,
+        context_json: str,
+        candidate_pairs: list[dict[str, str]] | None = None,
+    ) -> Stage1Result:
+        allowed_pairs = candidate_pairs or self.taxonomy.pairs()
+        candidates_json = self.taxonomy.format_candidates_json(allowed_pairs)
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": stage1_user_prompt(context_json, candidates_json)},
@@ -258,16 +281,14 @@ class OpenAICompatibleJobClassifier:
                 last_error = str(exc)
                 continue
 
-            if self.taxonomy.canonical_pair(result.major_job, result.sub_job):
+            if self._canonical_pair_from_candidates(result.major_job, result.sub_job, allowed_pairs):
                 return result
             last_error = "중직무/소직무 pair is not in candidate list"
 
         raise ValueError(f"stage1 validation failed: {last_error}")
 
     def _run_stage2(self, context_json: str, candidates: list[dict[str, str]]) -> FinalClassificationResult:
-        candidates_json = self.taxonomy.format_candidates_json(
-            self.taxonomy.annotate_candidates(candidates)
-        )
+        candidates_json = self.taxonomy.format_candidates_json(candidates)
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": stage2_user_prompt(context_json, candidates_json)},
@@ -317,260 +338,341 @@ class OpenAICompatibleJobClassifier:
                 return dict(row)
         return None
 
-    def _build_classification_hints(
+    def _canonical_pair_from_candidates(
         self,
-        review: str,
-        diagnosis_context: DiagnosisContext | None = None,
-    ) -> list[str]:
-        hints: list[str] = []
-        review_key = review.casefold()
+        major_job: object,
+        sub_job: object,
+        candidate_pairs: list[dict[str, str]],
+    ) -> dict[str, str] | None:
+        wanted_major = normalize_cell(major_job).casefold()
+        wanted_sub = normalize_cell(sub_job).casefold()
+        for pair in candidate_pairs:
+            if (
+                normalize_cell(pair.get("중직무", "")).casefold() == wanted_major
+                and normalize_cell(pair.get("소직무", "")).casefold() == wanted_sub
+            ):
+                return dict(pair)
+        return None
 
-        process_terms = self._matched_terms(review, PROCESS_EVIDENCE_TERMS)
-        if process_terms:
-            hints.append(
-                "공정 수행 근거 키워드 감지: "
-                + ", ".join(process_terms[:12])
-                + ". 중직무 판단 시 제품명보다 이 업무 단서를 우선 검토."
-            )
-
-        device_terms = self._matched_terms(review, DEVICE_CONTEXT_TERMS)
-        if device_terms:
-            hints.append(
-                "제품/Device/라인 용어 감지: "
-                + ", ".join(device_terms[:8])
-                + ". 이 용어만으로 중직무를 소자 또는 공정으로 확정하지 말 것."
-            )
-
-        ambiguous_unit_jobs = self.taxonomy.ambiguous_unit_jobs_in_text(review)
-        for item in ambiguous_unit_jobs[:5]:
-            major_jobs = ", ".join(item["중복 중직무"])
-            hints.append(
-                f"단위 직무 '{item['단위 직무']}'은 taxonomy에서 여러 중직무({major_jobs})에 중복 존재. "
-                "self_review의 실제 업무 동사와 산출물로 구분."
-            )
-
-        if "mlm" in review_key and process_terms:
-            hints.append(
-                "MLM이 Process Qual/Base Line/Scheme/단위공정/Process Flow 같은 표현과 함께 나오면 "
-                "DRAM 등 제품명이 있어도 공정 후보를 우선 검토."
-            )
-
-        if diagnosis_context:
-            hints.extend(self._build_diagnosis_hints(diagnosis_context))
-
-        return hints
-
-    def _build_diagnosis_hints(self, diagnosis_context: DiagnosisContext) -> list[str]:
-        hints: list[str] = []
-        diagnosis_text = self._diagnosis_text(diagnosis_context)
-
-        process_terms = self._matched_terms(diagnosis_text, DIAGNOSIS_PROCESS_TERMS)
-        if process_terms:
-            hints.append(
-                "진단 데이터에서 공정 계열 단서 감지: "
-                + ", ".join(process_terms[:12])
-                + ". self_review와 충돌하지 않으면 중직무 공정 근거로 강하게 사용."
-            )
-
-        matched_pairs = self._diagnosis_pair_matches(diagnosis_context)
-        for pair in matched_pairs[:5]:
-            hints.append(
-                f"진단 시 직무명/팀이 taxonomy 후보 '{pair['중직무']} > {pair['소직무']}'와 매칭됨."
-            )
-
-        matched_units = self._diagnosis_unit_matches(diagnosis_context)
-        if matched_units:
-            hints.append(
-                "진단 Category/항목이 taxonomy 단위 직무와 매칭됨: "
-                + ", ".join(matched_units[:12])
-                + ". 단위 직무 판단 근거로 사용."
-            )
-
-        if diagnosis_context.row_count > 1:
-            hints.append(
-                f"진단 데이터가 {diagnosis_context.row_count}개 행으로 존재함. "
-                "같은 구성원/연도 내 여러 스킬 항목이므로 반복되는 단서를 종합."
-            )
-
-        return hints
-
-    def _apply_process_guardrail(
+    def _diagnosis_priority(
         self,
-        canonical: dict[str, str],
-        review: str,
-    ) -> tuple[dict[str, str], str]:
-        if normalize_cell(canonical.get("중직무", "")).casefold() == "공정".casefold():
-            return canonical, ""
-
-        unit_job = canonical.get("단위 직무", "")
-        major_jobs = self.taxonomy.major_jobs_for_unit_job(unit_job)
-        if "공정" not in major_jobs:
-            return canonical, ""
-
-        process_terms = self._matched_terms(review, PROCESS_EVIDENCE_TERMS)
-        if len(process_terms) < 2:
-            return canonical, ""
-
-        same_device_candidates = self.taxonomy.rows_for_unit_job(
-            unit_job,
-            major_job="공정",
-            device=canonical.get("Device", ""),
-        )
-        if len(same_device_candidates) == 1:
-            terms = ", ".join(process_terms[:6])
-            return (
-                same_device_candidates[0],
-                f"process_guardrail: '{unit_job}'이 중복 단위직무이고 공정 수행 단서({terms})가 강해 동일 Device의 공정 후보로 보정",
-            )
-
-        process_candidates = self.taxonomy.rows_for_unit_job(unit_job, major_job="공정")
-        if len(process_candidates) == 1:
-            terms = ", ".join(process_terms[:6])
-            return (
-                process_candidates[0],
-                f"process_guardrail: '{unit_job}'이 중복 단위직무이고 공정 수행 단서({terms})가 강해 유일한 공정 후보로 보정",
-            )
-
-        return (
-            canonical,
-            f"process_guardrail_review: '{unit_job}'이 중복 단위직무이고 공정 수행 단서가 강하지만 공정 후보가 여러 개라 자동 보정하지 않음",
-        )
-
-    def _apply_diagnosis_guardrail(
-        self,
-        canonical: dict[str, str],
         diagnosis_context: DiagnosisContext | None,
-    ) -> tuple[dict[str, str], str]:
+    ) -> DiagnosisPriority:
         if not diagnosis_context:
-            return canonical, ""
+            return DiagnosisPriority()
 
-        best = self._best_diagnosis_taxonomy_match(diagnosis_context)
-        if not best:
-            return canonical, ""
+        reasons: list[str] = []
+        sub_job = self._best_column_match("소직무", diagnosis_context.job_names)
+        unit_job = None if sub_job else self._best_column_match("단위 직무", diagnosis_context.job_names)
 
-        best_row, score, second_score, evidence = best
-        if score < 8 or score - second_score < 2:
-            return canonical, ""
+        major_job = ""
+        inferred_sub_job = sub_job[0] if sub_job else ""
 
-        current_key = tuple(normalize_cell(canonical.get(column, "")) for column in TAXONOMY_COLUMNS)
-        best_key = tuple(normalize_cell(best_row.get(column, "")) for column in TAXONOMY_COLUMNS)
-        if current_key == best_key:
-            return canonical, ""
+        if sub_job:
+            reasons.append(f"진단 직무명 '{sub_job[1]}' -> 소직무 '{sub_job[0]}'")
+            sub_pairs = self._pairs_for_column_value("소직무", sub_job[0])
+            if len(sub_pairs) == 1:
+                major_job = sub_pairs[0]["중직무"]
+        elif unit_job:
+            unit_pairs = self._pairs_for_column_value("단위 직무", unit_job[0])
+            if len(unit_pairs) == 1:
+                major_job = unit_pairs[0]["중직무"]
+                inferred_sub_job = unit_pairs[0]["소직무"]
+                reasons.append(
+                    f"진단 직무명 '{unit_job[1]}' -> 단위 직무 '{unit_job[0]}'"
+                )
 
-        return (
-            best_row,
-            f"diagnosis_guardrail: 진단 데이터 근거({evidence})가 taxonomy 후보와 강하게 매칭되어 보정",
+        return DiagnosisPriority(
+            major_job=major_job,
+            sub_job=inferred_sub_job,
+            reason="; ".join(reasons),
         )
 
-    def _best_diagnosis_taxonomy_match(
+    def _diagnosis_pair_candidates(
         self,
-        diagnosis_context: DiagnosisContext,
-    ) -> tuple[dict[str, str], int, int, str] | None:
-        scored: list[tuple[int, dict[str, str], list[str]]] = []
-        diagnosis_fields = self._diagnosis_search_fields(diagnosis_context)
+        diagnosis_priority: DiagnosisPriority,
+    ) -> tuple[list[dict[str, str]], str]:
+        pairs = self.taxonomy.pairs()
+        major_key = normalize_cell(diagnosis_priority.major_job).casefold()
+        sub_key = normalize_cell(diagnosis_priority.sub_job).casefold()
+        if not major_key and not sub_key:
+            return pairs, ""
 
-        for row in self.taxonomy.rows:
-            score = 0
-            evidence: list[str] = []
+        filtered = [
+            pair
+            for pair in pairs
+            if (not major_key or normalize_cell(pair["중직무"]).casefold() == major_key)
+            and (not sub_key or normalize_cell(pair["소직무"]).casefold() == sub_key)
+        ]
+        if filtered:
+            return filtered, self._diagnosis_pair_reason(diagnosis_priority)
 
-            major_job = row["중직무"]
-            if self._value_in_fields(major_job, diagnosis_fields["team_job_item"]):
-                score += 5
-                evidence.append(f"중직무={major_job}")
+        if sub_key:
+            sub_filtered = [
+                pair
+                for pair in pairs
+                if normalize_cell(pair["소직무"]).casefold() == sub_key
+            ]
+            if sub_filtered:
+                return (
+                    sub_filtered,
+                    f"diagnosis 우선 적용: 소직무 '{diagnosis_priority.sub_job}' 기준 후보 제한",
+                )
 
-            sub_job = row["소직무"]
-            if self._value_in_fields(sub_job, diagnosis_fields["team_job_item"]):
-                score += 5
-                evidence.append(f"소직무={sub_job}")
+        if major_key:
+            major_filtered = [
+                pair
+                for pair in pairs
+                if normalize_cell(pair["중직무"]).casefold() == major_key
+            ]
+            if major_filtered:
+                return (
+                    major_filtered,
+                    f"diagnosis 우선 적용: 중직무 '{diagnosis_priority.major_job}' 기준 후보 제한",
+                )
 
-            unit_job = row["단위 직무"]
-            if self._value_in_fields(unit_job, diagnosis_fields["category_item_job"]):
-                score += 4
-                evidence.append(f"단위 직무={unit_job}")
+        return pairs, ""
 
-            device = row["Device"]
-            if self._value_in_fields(device, diagnosis_fields["all"]):
-                score += 1
-                evidence.append(f"Device={device}")
+    def _diagnosis_pair_reason(self, diagnosis_priority: DiagnosisPriority) -> str:
+        labels: list[str] = []
+        if diagnosis_priority.major_job:
+            labels.append(f"중직무 '{diagnosis_priority.major_job}'")
+        if diagnosis_priority.sub_job:
+            labels.append(f"소직무 '{diagnosis_priority.sub_job}'")
+        return f"diagnosis 우선 적용: {', '.join(labels)} 기준 stage1 후보 제한"
 
-            for detail_column in ["세부 직무1", "세부 직무2"]:
-                detail_job = row[detail_column]
-                if self._value_in_fields(detail_job, diagnosis_fields["category_item_job"]):
-                    score += 2
-                    evidence.append(f"{detail_column}={detail_job}")
-
-            if score:
-                scored.append((score, row, evidence))
+    def _best_column_match(
+        self,
+        column: str,
+        source_values: list[str],
+    ) -> tuple[str, str, int] | None:
+        scored: list[tuple[int, str, str]] = []
+        for taxonomy_value in self._unique_column_values(column):
+            for source_value in source_values:
+                score = _text_match_score(taxonomy_value, source_value)
+                if score:
+                    scored.append((score, taxonomy_value, source_value))
 
         if not scored:
             return None
 
         scored.sort(key=lambda item: item[0], reverse=True)
-        best_score, best_row, best_evidence = scored[0]
-        second_score = scored[1][0] if len(scored) > 1 else 0
-        return best_row, best_score, second_score, ", ".join(best_evidence[:6])
+        top_score = scored[0][0]
+        winners = [
+            (taxonomy_value, source_value)
+            for score, taxonomy_value, source_value in scored
+            if score == top_score
+        ]
+        winner_keys = {normalize_cell(taxonomy_value).casefold() for taxonomy_value, _ in winners}
+        if len(winner_keys) != 1:
+            return None
+        taxonomy_value, source_value = winners[0]
+        return taxonomy_value, source_value, top_score
 
-    def _diagnosis_pair_matches(self, diagnosis_context: DiagnosisContext) -> list[dict[str, str]]:
-        fields = self._diagnosis_search_fields(diagnosis_context)["team_job_item"]
-        result: list[dict[str, str]] = []
+    def _unique_column_values(self, column: str) -> list[str]:
+        values: list[str] = []
+        seen: set[str] = set()
+        for row in self.taxonomy.rows:
+            value = normalize_cell(row.get(column, ""))
+            key = value.casefold()
+            if not value or key in seen:
+                continue
+            seen.add(key)
+            values.append(value)
+        return values
+
+    def _pairs_for_column_value(self, column: str, value: str) -> list[dict[str, str]]:
+        wanted = normalize_cell(value).casefold()
+        pairs: list[dict[str, str]] = []
         seen: set[tuple[str, str]] = set()
-        for pair in self.taxonomy.pairs():
-            if not self._value_in_fields(pair["중직무"], fields):
+        for row in self.taxonomy.rows:
+            if normalize_cell(row.get(column, "")).casefold() != wanted:
                 continue
-            if not self._value_in_fields(pair["소직무"], fields):
-                continue
-            key = (pair["중직무"], pair["소직무"])
+            key = (
+                normalize_cell(row["중직무"]).casefold(),
+                normalize_cell(row["소직무"]).casefold(),
+            )
             if key in seen:
                 continue
             seen.add(key)
-            result.append(pair)
-        return result
+            pairs.append({"중직무": row["중직무"], "소직무": row["소직무"]})
+        return pairs
 
-    def _diagnosis_unit_matches(self, diagnosis_context: DiagnosisContext) -> list[str]:
-        fields = self._diagnosis_search_fields(diagnosis_context)["category_item_job"]
-        result: list[str] = []
+    def _build_classification_hints(
+        self,
+        review: str,
+        diagnosis_context: DiagnosisContext | None = None,
+        knowledge_items: list[JobKnowledge] | None = None,
+    ) -> list[str]:
+        hints: list[str] = []
+
+        if knowledge_items:
+            for item in knowledge_items[: self.config.max_knowledge_hints]:
+                hints.append(item.prompt_hint())
+
+        if diagnosis_context:
+            hints.extend(
+                self._diagnosis_team_major_hints(
+                    diagnosis_context,
+                    knowledge_items or [],
+                )
+            )
+
+        return hints
+
+    def _diagnosis_team_major_hints(
+        self,
+        diagnosis_context: DiagnosisContext,
+        knowledge_items: list[JobKnowledge],
+    ) -> list[str]:
+        hints: list[str] = []
+        hints.extend(self._direct_team_major_hints(diagnosis_context))
+        hints.extend(self._knowledge_team_major_hints(diagnosis_context, knowledge_items))
+        return hints[: self.config.max_knowledge_hints]
+
+    def _direct_team_major_hints(
+        self,
+        diagnosis_context: DiagnosisContext,
+    ) -> list[str]:
+        matches: list[tuple[int, str, str]] = []
+        for major_job in self._unique_column_values("중직무"):
+            for team in diagnosis_context.teams:
+                score = _text_match_score(major_job, team)
+                if score:
+                    matches.append((score, major_job, team))
+
+        matches.sort(key=lambda item: item[0], reverse=True)
+        hints: list[str] = []
         seen: set[str] = set()
-        for row in self.taxonomy.rows:
-            unit_job = row["단위 직무"]
-            key = normalize_cell(unit_job)
-            if not key or normalize_key(key) in seen:
+        for _, major_job, team in matches:
+            key = normalize_cell(major_job).casefold()
+            if key in seen:
                 continue
-            if self._value_in_fields(unit_job, fields):
-                seen.add(normalize_key(key))
-                result.append(key)
-        return result
+            seen.add(key)
+            hints.append(
+                "diagnosis team 직접 단서: "
+                f"team '{team}'에 taxonomy 중직무 '{major_job}' 표현이 포함됨. "
+                "자동 후보 제한은 아니며 중직무 판단 참고로만 사용."
+            )
+            if len(hints) >= 3:
+                break
+        return hints
 
-    def _diagnosis_search_fields(self, diagnosis_context: DiagnosisContext) -> dict[str, list[str]]:
-        teams = diagnosis_context.teams
-        job_names = diagnosis_context.job_names
-        categories = diagnosis_context.categories
-        items = diagnosis_context.items
+    def _knowledge_team_major_hints(
+        self,
+        diagnosis_context: DiagnosisContext,
+        knowledge_items: list[JobKnowledge],
+    ) -> list[str]:
+        hints: list[str] = []
+        seen: set[tuple[str, str]] = set()
+        for item in knowledge_items[: self.config.max_knowledge_hints]:
+            major_job = normalize_cell(item.target_major_job)
+            if not major_job:
+                continue
+            match = self._knowledge_alias_team_match(item, diagnosis_context.teams)
+            if not match:
+                continue
+            alias, team = match
+            key = (item.id, major_job.casefold())
+            if key in seen:
+                continue
+            seen.add(key)
+            hints.append(
+                "diagnosis team 사용자 지식 단서: "
+                f"team '{team}'에 사용자 지식[{item.id}] alias '{alias}'가 매칭되어 "
+                f"중직무 '{major_job}' 후보를 검토."
+            )
+        return hints
+
+    def _knowledge_alias_team_match(
+        self,
+        item: JobKnowledge,
+        teams: list[str],
+    ) -> tuple[str, str] | None:
+        scored: list[tuple[int, str, str]] = []
+        for alias in item.aliases:
+            for team in teams:
+                score = _text_match_score(alias, team)
+                if score:
+                    scored.append((score, alias, team))
+        if not scored:
+            return None
+        scored.sort(key=lambda item: item[0], reverse=True)
+        _, alias, team = scored[0]
+        return alias, team
+
+    def _previous_year_prompt_payload(
+        self,
+        previous_year_context: dict[str, Any] | None,
+    ) -> dict[str, object] | None:
+        if not previous_year_context:
+            return None
+
+        source_classification = previous_year_context.get("classification")
+        if not isinstance(source_classification, dict):
+            source_classification = previous_year_context
+
+        classification = {
+            column: normalize_cell(source_classification.get(column, ""))
+            for column in TAXONOMY_COLUMNS
+        }
+        if not any(classification.values()):
+            return None
+
+        payload: dict[str, object] = {
+            "year": normalize_cell(previous_year_context.get("year", "")),
+            "classification": classification,
+            "job_path": _job_path_text(classification),
+            "confidence": _safe_float(previous_year_context.get("confidence", 0.0)),
+            "needs_review": bool(previous_year_context.get("needs_review", True)),
+            "is_soft_continuity_hint": True,
+        }
+        reason = normalize_cell(previous_year_context.get("reason", ""))
+        if reason:
+            payload["reason"] = reason[:500]
+        return payload
+
+    def _previous_year_output_payload(
+        self,
+        previous_year_payload: dict[str, object] | None,
+    ) -> dict[str, Any]:
+        if not previous_year_payload:
+            return {
+                "previous_year": "",
+                "previous_year_job_path": "",
+                "previous_year_confidence": "",
+                "previous_year_needs_review": "",
+            }
         return {
-            "team_job_item": teams + job_names + items,
-            "category_item_job": categories + items + job_names,
-            "all": teams + job_names + categories + items,
+            "previous_year": previous_year_payload.get("year", ""),
+            "previous_year_job_path": previous_year_payload.get("job_path", ""),
+            "previous_year_confidence": previous_year_payload.get("confidence", ""),
+            "previous_year_needs_review": previous_year_payload.get("needs_review", ""),
         }
 
+    def _retrieve_knowledge(
+        self,
+        review: str,
+        diagnosis_context: DiagnosisContext | None,
+    ) -> list[JobKnowledge]:
+        if not self.knowledge_store:
+            return []
+        search_text = review
+        if diagnosis_context:
+            search_text = f"{review} {self._diagnosis_text(diagnosis_context)}"
+        return self.knowledge_store.retrieve(
+            search_text,
+            limit=self.config.max_knowledge_hints,
+        )
+
     def _diagnosis_text(self, diagnosis_context: DiagnosisContext) -> str:
-        fields = self._diagnosis_search_fields(diagnosis_context)["all"]
+        fields = (
+            diagnosis_context.teams
+            + diagnosis_context.job_names
+            + diagnosis_context.categories
+            + diagnosis_context.items
+        )
         return " ".join(fields)
-
-    def _value_in_fields(self, value: object, fields: list[str]) -> bool:
-        value_key = normalize_cell(value)
-        if len(value_key) < 2:
-            return False
-        target = normalize_key(value_key)
-        for field in fields:
-            field_key = normalize_key(field)
-            if not field_key:
-                continue
-            if target == field_key or target in field_key or field_key in target:
-                return True
-        return False
-
-    def _matched_terms(self, review: str, terms: list[str]) -> list[str]:
-        review_key = review.casefold()
-        return [term for term in terms if term.casefold() in review_key]
 
     def _chat_json_text(self, messages: list[dict[str, str]]) -> str:
         payload: dict[str, Any] = {
@@ -617,12 +719,16 @@ class OpenAICompatibleJobClassifier:
         payload = {
             "context": context_json,
             "taxonomy_version": self.taxonomy.version_hash(),
+            "knowledge_version": self._knowledge_version(),
             "model": self.settings.model,
             "include_team": self.config.include_team_in_prompt,
             "prompt_version": PROMPT_VERSION,
         }
         raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _knowledge_version(self) -> str:
+        return self.knowledge_store.version_hash() if self.knowledge_store else ""
 
     def _review_required_result(self, reason: str) -> dict[str, Any]:
         return {
@@ -632,5 +738,54 @@ class OpenAICompatibleJobClassifier:
             "needs_review": True,
             "ambiguity_reason": "",
             "guardrail_reason": "",
+            "diagnosis_priority_reason": "",
+            "previous_year": "",
+            "previous_year_job_path": "",
+            "previous_year_confidence": "",
+            "previous_year_needs_review": "",
             "error": reason,
         }
+
+    def _review_required_result_with_diagnosis_priority(
+        self,
+        reason: str,
+        applied_priority_reasons: list[str],
+    ) -> dict[str, Any]:
+        result = self._review_required_result(reason)
+        result["diagnosis_priority_reason"] = "; ".join(applied_priority_reasons)
+        return result
+
+
+def _compact_text(value: object) -> str:
+    return re.sub(r"[\W_]+", "", normalize_cell(value).casefold())
+
+
+def _text_match_score(target: object, source: object) -> int:
+    target_text = normalize_cell(target).casefold()
+    source_text = normalize_cell(source).casefold()
+    target_compact = _compact_text(target)
+    source_compact = _compact_text(source)
+    if not target_compact or not source_compact:
+        return 0
+    if target_text == source_text or target_compact == source_compact:
+        return 1000 + len(target_compact)
+    if len(target_compact) >= 2 and target_compact in source_compact:
+        return 700 + len(target_compact)
+    if len(source_compact) >= 2 and source_compact in target_compact:
+        return 600 + len(source_compact)
+    return 0
+
+
+def _job_path_text(classification: dict[str, object]) -> str:
+    return " > ".join(
+        normalize_cell(classification.get(column, ""))
+        for column in TAXONOMY_COLUMNS
+        if normalize_cell(classification.get(column, ""))
+    )
+
+
+def _safe_float(value: object) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0

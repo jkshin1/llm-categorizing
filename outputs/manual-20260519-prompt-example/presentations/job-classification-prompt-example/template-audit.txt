@@ -1,0 +1,20 @@
+task mode: targeted-edit
+primary deck-profile: template-following
+
+preserve:
+- Existing 1536x864 canvas, light slate background, two-column card grid, numbered chips, footer strip.
+- Pretendard / Office theme typography and existing color roles.
+- Existing deck sequence and all slides except source slide 3.
+
+improve:
+- Slide 3 currently says the LLM uses 업무 동사/산출물/검증 활동, but it does not show a concrete prompt-level example.
+- Add a compact example of what the prompt extracts and how those clues change the job decision.
+
+do not imitate:
+- Do not add dense code blocks or raw prompt text that would break the executive overview tone.
+
+insertion contract:
+- Edit source slide 3 in place.
+- Keep four-card structure and footer strip.
+- Replace card 2 with clue extraction examples.
+- Replace card 3 with decision application examples.

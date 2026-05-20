@@ -39,11 +39,23 @@ copy .env.example .env
 `.env` 파일을 열어 사내 LLM endpoint를 설정합니다.
 
 ```text
+LLM_ENDPOINT_PROFILE=internal
 INTERNAL_LLM_BASE_URL=https://your-internal-llm-endpoint/v1
 INTERNAL_LLM_API_KEY=replace-me
 INTERNAL_LLM_MODEL=your-internal-model-name
 LLM_PROVIDER_PROFILE=auto
 LLM_TIMEOUT_SECONDS=300
+```
+
+Alibaba/DashScope OpenAI-compatible API를 쓰려면 endpoint profile을 바꿉니다.
+
+```text
+LLM_ENDPOINT_PROFILE=alibaba
+ALIBABA_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+ALIBABA_API_KEY=replace-me
+ALIBABA_MODEL=qwen-plus
+LLM_PROVIDER_PROFILE=qwen
+LLM_QWEN_DISABLE_THINKING=1
 ```
 
 사내 endpoint가 OpenAI의 `response_format={"type":"json_object"}` 옵션을 지원하지 않으면 `LLM_USE_JSON_RESPONSE_FORMAT=0`을 유지하세요.
@@ -135,6 +147,49 @@ python classify_jobs.py ^
 python classify_jobs.py --no-diagnosis
 ```
 
+사용자 입력 지식 DB를 쓰지 않으려면:
+
+```bat
+python classify_jobs.py --knowledge-db-path ""
+```
+
+## 지식 입력 페이지
+
+분류 판단에 필요한 도메인 지식은 간단한 로컬 페이지에서 추가할 수 있습니다. 입력된 원문은 그대로 저장하고, LLM이 제목/매칭 용어/적용 조건/힌트/관련 taxonomy 계층으로 정리한 구조화 데이터도 함께 SQLite에 저장합니다.
+
+```bat
+python serve_knowledge.py
+```
+
+브라우저에서 아래 주소를 열어 지식을 입력합니다.
+
+```text
+http://127.0.0.1:8765
+```
+
+기본 DB 경로는 `data/output/job_knowledge.sqlite3`입니다. 다른 경로를 쓰려면 페이지 서버와 분류 실행 모두 같은 경로를 지정하세요.
+
+```bat
+python serve_knowledge.py --knowledge-db-path data\output\job_knowledge.sqlite3
+python classify_jobs.py --knowledge-db-path data\output\job_knowledge.sqlite3
+```
+
+지식 입력 페이지는 기본적으로 `data/input/taxonomy.csv`가 있으면 LLM 정리 시 taxonomy 참고값을 함께 전달하고, 저장 전 target 값이 실제 taxonomy에 있는지 검증합니다. 다른 taxonomy를 쓰려면:
+
+```bat
+python serve_knowledge.py --taxonomy examples\taxonomy_sample.csv
+```
+
+LLM 환경변수가 아직 없지만 UI만 시험하려면 fallback draft 저장을 허용할 수 있습니다. 운영에서는 LLM 정리 결과를 쓰는 것을 권장합니다.
+
+```bat
+python serve_knowledge.py --allow-fallback-normalizer
+```
+
+저장된 지식은 처음에는 `soft_hint`/`draft`로 취급됩니다. 페이지에서 `승격`을 누르면 `verified_rule`/`approved`로 바뀌며, 분류 prompt에서 더 강한 참고 지식으로 전달됩니다. 그래도 자동 보정 rule은 아니므로, 실제 정확도 개선 여부는 샘플 재분류와 수동 검수로 확인해야 합니다.
+
+긴 텍스트 파일은 페이지의 `TXT 줄 단위 가져오기`에서 업로드할 수 있습니다. 빈 줄은 제외하고 줄바꿈 1줄을 지식 1개로 저장합니다. 기본 제한은 한 번에 최대 100줄, 줄당 최대 4,000자, 요청 본문 최대 1MB입니다.
+
 ## 개인정보 처리 기준
 
 - LLM 프롬프트에는 `name`, `emp_num`을 보내지 않습니다.
@@ -153,7 +208,9 @@ python classify_jobs.py --no-diagnosis
 ```text
 year,team,emp_num,name,
 중직무,소직무,Device,단위 직무,세부 직무1,세부 직무2,
-confidence,reason,needs_review,ambiguity_reason,guardrail_reason,
+confidence,reason,needs_review,ambiguity_reason,guardrail_reason,diagnosis_priority_reason,
+previous_year,previous_year_job_path,previous_year_confidence,previous_year_needs_review,
+used_knowledge_ids,used_knowledge_types,knowledge_version,
 diagnosis_row_count,diagnosis_teams,diagnosis_job_names,diagnosis_categories,diagnosis_items,
 error,input_truncated,taxonomy_version,model_name,classified_at
 ```
@@ -163,26 +220,32 @@ error,input_truncated,taxonomy_version,model_name,classified_at
 - `self_review`가 비어 있음
 - LLM 결과가 taxonomy에 없는 조합임
 - confidence가 `--confidence-review-threshold`보다 낮음
-- `MLM`처럼 동일한 `단위 직무`가 여러 `중직무`에 중복 존재함
 - API 호출 또는 JSON 파싱 실패
 - 후보가 너무 많아 안전하게 분류할 수 없음
 
 ## 분류 방식
 
-1. `중직무`/`소직무` 후보 중 하나를 먼저 선택합니다.
-2. 선택된 pair의 하위 taxonomy row만 후보로 넣어 최종 계층을 선택합니다.
-3. 최종 결과가 taxonomy CSV의 row와 정확히 일치하는지 검증합니다.
-4. 진단 CSV가 있으면 `year + emp_num` 기준으로 여러 행을 묶어 team/job/category/item 근거로 함께 사용합니다.
-5. 동일 입력은 `data/output/classification_cache.jsonl`에 캐시해 재실행 비용과 결과 흔들림을 줄입니다.
+1. 진단 CSV가 있으면 `year + emp_num`으로 매칭된 `team`, `진단 시 직무명`을 먼저 봅니다.
+2. `진단 시 직무명`이 taxonomy의 `소직무`와 매칭되면 해당 `중직무`/`소직무` 후보를 우선 사용합니다. `소직무` 매칭이 없지만 taxonomy의 `단위 직무`와 유일하게 매칭되면 그 row의 `중직무`/`소직무`를 사용합니다.
+3. diagnosis의 `team`은 후보를 강제로 제한하지 않습니다. 다만 team에 taxonomy `중직무` 값이 직접 포함되면 soft hint로 전달하고, `TD -> 소자`, `Heraion -> NAND` 같은 사내 조직/프로젝트/제품 alias는 지식 DB에서 검색된 `classification_hints`로 LLM에 전달합니다.
+4. 실행 순서는 구성원별 `year` 오름차순입니다. 같은 구성원의 직전 연도 결과가 있으면 `previous_year_classification`으로 prompt에 넣어 직무 연속성 참고 정보로 사용합니다.
+5. diagnosis로 후보가 하나로 좁혀지지 않으면 남은 `중직무`/`소직무` 후보 중 하나를 LLM이 선택합니다.
+6. 선택된 pair의 하위 taxonomy row만 후보로 넣어 최종 계층을 선택합니다.
+7. 최종 결과가 taxonomy CSV의 row와 정확히 일치하는지 검증합니다.
+8. 동일 입력은 `data/output/classification_cache.jsonl`에 캐시해 재실행 비용과 결과 흔들림을 줄입니다.
 
 ## 정확도 개선 로직
 
-- 입력 CSV 컬럼을 추가하지 않고 `self_review` 문장 안의 업무 단서를 자동 감지해 프롬프트 참고 정보로 전달합니다.
-- `DRAM`, `NAND`, `Logic` 같은 제품/Device 용어는 중직무 직접 근거로 쓰지 않도록 프롬프트에서 제한합니다.
-- `Process Qual`, `Base Line`, `Scheme`, `Process Flow`, `Reticle`, `MTS`, `PLR`, `단위공정 Tuning`, `Low-k IMD` 등은 공정 수행 근거로 우선 검토하게 했습니다.
-- taxonomy에서 동일한 `단위 직무`가 여러 `중직무`에 존재하면 후보에 `분류주의`를 붙이고, 결과 CSV의 `ambiguity_reason`에 검수 사유를 남깁니다.
-- 강한 공정 수행 단서가 있고 동일 `단위 직무`가 소자/공정에 중복될 때, 동일 Device의 공정 후보가 유일하면 `guardrail_reason`을 남기고 공정 후보로 보정합니다.
-- 진단 데이터의 `team`에 `DRAM공정 > DPC`, `진단 시 직무명`에 `Etch공정`, `Category`에 `CLN`/`MLM`처럼 taxonomy와 맞는 단서가 있으면 강한 보조 근거로 사용합니다.
+- 코드에 내장된 직무별 키워드 룰은 사용하지 않습니다.
+- 입력 CSV의 `self_review`와 선택 입력인 `diagnosis_context`는 LLM에 원본 근거 데이터로 전달합니다.
+- diagnosis의 `진단 시 직무명`은 taxonomy에 실제 존재하는 값과 매칭될 때만 `중직무`/`소직무` 후보 제한에 사용합니다. 적용 여부는 `diagnosis_priority_reason` 컬럼에 기록됩니다.
+- diagnosis의 `team`은 후보 제한 rule로 쓰지 않고, 직접 보이는 taxonomy 중직무 표현과 지식 DB에 저장된 alias/제품 지식을 LLM 판단 근거로 전달합니다. `TD` 같은 2글자 alias도 team에서 독립 token으로 매칭되면 지식 검색에 사용합니다.
+- 직전 연도 결과는 같은 `emp_num`의 `year-1` 결과가 있고 오류가 없을 때만 사용합니다. 현재 연도 self_review/diagnosis와 충돌하면 현재 연도 근거를 우선하도록 prompt에 명시합니다.
+- 사용자가 지식 입력 페이지로 추가한 지식은 self_review와 매칭되는 항목만 `classification_hints`에 넣습니다. 결과 CSV의 `used_knowledge_ids`, `used_knowledge_types`, `knowledge_version`으로 어떤 지식이 쓰였는지 추적할 수 있습니다.
+- 지식 DB에는 `knowledge_type`과 `review_status`를 저장합니다. `verified_rule` 또는 `approved` 지식은 prompt에서 더 강한 참고 지식으로 전달하지만, 자동 보정은 하지 않습니다.
+- 분류 시 검색된 지식은 `knowledge_usage` 테이블에 `classification_id`, `knowledge_id`, `match_score`, 최종 분류 결과와 함께 기록되어 나중에 어떤 지식이 실제 분류에 자주 쓰였는지 점검할 수 있습니다.
+- taxonomy 중복 단위직무를 후보에 별도 주의 정보로 주입하던 로직도 분류 판단에서는 제거했습니다. `ambiguity_reason` 컬럼은 과거 출력 스키마 호환을 위해 남아 있지만 새 분류에서는 빈 값입니다.
+- 기존 룰 기반 자동 보정은 제거했습니다. `guardrail_reason` 컬럼은 과거 출력 스키마 호환을 위해 남아 있지만 새 분류에서는 빈 값입니다.
 - 프롬프트 버전을 cache key에 포함해, 프롬프트 개선 전의 기존 cache 결과가 재사용되지 않도록 했습니다.
 
 ## GLM-5 운영 튜닝

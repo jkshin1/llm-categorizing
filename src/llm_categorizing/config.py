@@ -12,6 +12,7 @@ DEFAULT_LLM_TIMEOUT_SECONDS = 300.0
 DEFAULT_LLM_MAX_TOKENS = 1200
 DEFAULT_GLM_MAX_TOKENS = 2048
 DEFAULT_QWEN_THINKING_MAX_TOKENS = 4096
+SUPPORTED_ENDPOINT_PROFILES = {"auto", "internal", "alibaba"}
 SUPPORTED_PROVIDER_PROFILES = {"auto", "qwen", "glm", "generic"}
 
 
@@ -32,28 +33,15 @@ class LLMSettings:
     max_tokens: int = DEFAULT_LLM_MAX_TOKENS
     use_json_response_format: bool = False
     extra_body: dict[str, Any] | None = None
+    endpoint_profile: str = "internal"
     provider_profile: str = "generic"
 
     @classmethod
     def from_env(cls) -> "LLMSettings":
         load_dotenv()
 
-        base_url = os.getenv("INTERNAL_LLM_BASE_URL", "").strip()
-        api_key = os.getenv("INTERNAL_LLM_API_KEY", "").strip()
-        model = os.getenv("INTERNAL_LLM_MODEL", "").strip()
-
-        missing = [
-            name
-            for name, value in {
-                "INTERNAL_LLM_BASE_URL": base_url,
-                "INTERNAL_LLM_API_KEY": api_key,
-                "INTERNAL_LLM_MODEL": model,
-            }.items()
-            if not value
-        ]
-        if missing:
-            joined = ", ".join(missing)
-            raise ValueError(f"Missing required environment variables: {joined}")
+        endpoint_profile = _endpoint_profile_from_env()
+        base_url, api_key, model, resolved_endpoint_profile = _endpoint_settings_from_env(endpoint_profile)
 
         provider_profile = _provider_profile_from_env(model)
 
@@ -68,8 +56,69 @@ class LLMSettings:
             max_tokens=_max_tokens_from_env(model, provider_profile),
             use_json_response_format=_env_bool("LLM_USE_JSON_RESPONSE_FORMAT", False),
             extra_body=_extra_body_from_env(model, provider_profile),
+            endpoint_profile=resolved_endpoint_profile,
             provider_profile=provider_profile,
         )
+
+
+def _endpoint_profile_from_env() -> str:
+    requested = os.getenv("LLM_ENDPOINT_PROFILE", "auto").strip().casefold()
+    if requested not in SUPPORTED_ENDPOINT_PROFILES:
+        supported = ", ".join(sorted(SUPPORTED_ENDPOINT_PROFILES))
+        raise ValueError(f"LLM_ENDPOINT_PROFILE must be one of: {supported}")
+    return requested
+
+
+def _endpoint_settings_from_env(endpoint_profile: str) -> tuple[str, str, str, str]:
+    if endpoint_profile == "auto":
+        for candidate in ["internal", "alibaba"]:
+            base_url, api_key, model, _ = _endpoint_candidate_from_env(candidate)
+            if base_url and api_key and model:
+                return base_url, api_key, model, candidate
+        raise ValueError(
+            "Missing required environment variables for an LLM endpoint: "
+            "set INTERNAL_LLM_BASE_URL/INTERNAL_LLM_API_KEY/INTERNAL_LLM_MODEL "
+            "or ALIBABA_BASE_URL/ALIBABA_API_KEY/ALIBABA_MODEL"
+        )
+
+    base_url, api_key, model, required = _endpoint_candidate_from_env(endpoint_profile)
+    missing = [name for name, value in required.items() if not value]
+    if missing:
+        joined = ", ".join(missing)
+        raise ValueError(f"Missing required environment variables for {endpoint_profile}: {joined}")
+    return base_url, api_key, model, endpoint_profile
+
+
+def _endpoint_candidate_from_env(endpoint_profile: str) -> tuple[str, str, str, dict[str, str]]:
+    common_model = os.getenv("LLM_MODEL", "").strip()
+    if endpoint_profile == "alibaba":
+        base_url = os.getenv("ALIBABA_BASE_URL", "").strip()
+        api_key = os.getenv("ALIBABA_API_KEY", "").strip()
+        model = os.getenv("ALIBABA_MODEL", "").strip() or common_model
+        return (
+            base_url,
+            api_key,
+            model,
+            {
+                "ALIBABA_BASE_URL": base_url,
+                "ALIBABA_API_KEY": api_key,
+                "ALIBABA_MODEL or LLM_MODEL": model,
+            },
+        )
+
+    base_url = os.getenv("INTERNAL_LLM_BASE_URL", "").strip()
+    api_key = os.getenv("INTERNAL_LLM_API_KEY", "").strip()
+    model = os.getenv("INTERNAL_LLM_MODEL", "").strip() or common_model
+    return (
+        base_url,
+        api_key,
+        model,
+        {
+            "INTERNAL_LLM_BASE_URL": base_url,
+            "INTERNAL_LLM_API_KEY": api_key,
+            "INTERNAL_LLM_MODEL or LLM_MODEL": model,
+        },
+    )
 
 
 def _provider_profile_from_env(model: str) -> str:

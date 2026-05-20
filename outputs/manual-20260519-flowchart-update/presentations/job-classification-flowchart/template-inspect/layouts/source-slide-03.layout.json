@@ -1,0 +1,1511 @@
+{
+  "schema": "openai.presentation.layout/v4",
+  "unit": "px",
+  "slide": {
+    "aid": "sl/s72x4nap",
+    "id": "s72x4nap",
+    "slide": 4,
+    "layoutId": "/ppt/slideLayouts/slideLayout7.xml",
+    "layoutName": "Blank",
+    "layoutType": "blank",
+    "masterLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+    "frame": {
+      "left": 0,
+      "top": 0,
+      "width": 1536,
+      "height": 864
+    }
+  },
+  "theme": {
+    "colorSchemeName": "Office",
+    "colors": {
+      "accent1": "#2563EB",
+      "accent2": "#10B981",
+      "accent3": "#8B5CF6",
+      "accent4": "#F59E0B",
+      "accent5": "#EF4444",
+      "accent6": "#06B6D4",
+      "dk1": "#0F172A",
+      "lt1": "#F1F5F9",
+      "dk2": "#334155",
+      "lt2": "#E2E8F0",
+      "hlink": "#0000FF",
+      "folHlink": "#800080"
+    },
+    "typefaces": [
+      "+mn-lt"
+    ]
+  },
+  "inheritedLayers": [
+    {
+      "scope": "layout",
+      "id": "/ppt/slideLayouts/slideLayout7.xml",
+      "name": "Blank",
+      "type": "blank",
+      "parentLayoutId": "/ppt/slideMasters/slideMaster1.xml",
+      "elements": [
+        {
+          "order": 1,
+          "kind": "shape",
+          "scope": "layout",
+          "aid": "template/layout//ppt/slideLayouts/slideLayout7.xml/2",
+          "id": "2",
+          "name": "Date Placeholder 1",
+          "bbox": [
+            0,
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "order": 2,
+          "kind": "shape",
+          "scope": "layout",
+          "aid": "template/layout//ppt/slideLayouts/slideLayout7.xml/3",
+          "id": "3",
+          "name": "Footer Placeholder 2",
+          "bbox": [
+            0,
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "scope": "master",
+      "id": "/ppt/slideMasters/slideMaster1.xml",
+      "type": "master",
+      "backgroundColor": "#F1F5F9",
+      "elements": [
+        {
+          "order": 1,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/2",
+          "id": "2",
+          "name": "Title Placeholder 1",
+          "bbox": [
+            48,
+            28.83,
+            864,
+            120
+          ],
+          "geometry": "rect"
+        },
+        {
+          "order": 2,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/3",
+          "id": "3",
+          "name": "Text Placeholder 2",
+          "bbox": [
+            48,
+            168,
+            864,
+            475.17
+          ],
+          "geometry": "rect"
+        },
+        {
+          "order": 3,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/4",
+          "id": "4",
+          "name": "Date Placeholder 3",
+          "bbox": [
+            48,
+            667.33,
+            224,
+            38.33
+          ],
+          "geometry": "rect"
+        },
+        {
+          "order": 4,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/5",
+          "id": "5",
+          "name": "Footer Placeholder 4",
+          "bbox": [
+            328,
+            667.33,
+            304,
+            38.33
+          ],
+          "geometry": "rect"
+        },
+        {
+          "order": 5,
+          "kind": "shape",
+          "scope": "master",
+          "aid": "template/master//ppt/slideMasters/slideMaster1.xml/6",
+          "id": "6",
+          "name": "Slide Number Placeholder 5",
+          "bbox": [
+            688,
+            667.33,
+            224,
+            38.33
+          ],
+          "geometry": "rect"
+        }
+      ]
+    }
+  ],
+  "elements": [
+    {
+      "order": 1,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/onyd0z61",
+      "id": "200",
+      "name": "BadgeBg",
+      "bbox": [
+        64,
+        50.67,
+        173.33,
+        42.67
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#EEF2FF"
+    },
+    {
+      "order": 2,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/d8v6psfi",
+      "id": "201",
+      "name": "Badge",
+      "bbox": [
+        64,
+        50.67,
+        173.33,
+        42.67
+      ],
+      "geometry": "rect",
+      "text": "판단 가이드",
+      "textPreview": "판단 가이드",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "판단 가이드"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "판단 가이드",
+          "runs": [
+            {
+              "index": 1,
+              "text": "판단 가이드",
+              "fontSize": 14.67,
+              "color": "#4338CA",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 3,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/6hcrmhk3",
+      "id": "202",
+      "name": "Title",
+      "bbox": [
+        64,
+        109.33,
+        1408,
+        58.67
+      ],
+      "geometry": "rect",
+      "text": "LLM 판단 가이드 룰",
+      "textPreview": "LLM 판단 가이드 룰",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "LLM 판단 가이드 룰"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "LLM 판단 가이드 룰",
+          "runs": [
+            {
+              "index": 1,
+              "text": "LLM 판단 가이드 룰",
+              "fontSize": 37.33,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 4,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/z25kb6xk",
+      "id": "203",
+      "name": "Subtitle",
+      "bbox": [
+        64,
+        178.67,
+        1408,
+        58.67
+      ],
+      "geometry": "rect",
+      "text": "LLM은 자유롭게 직무를 생성하지 않고, 사전에 정한 판단 규칙과 taxonomy 안에서만 분류합니다.",
+      "textPreview": "LLM은 자유롭게 직무를 생성하지 않고, 사전에 정한 판단 규칙과 taxonomy 안에서만 분류합니다.",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "LLM은 자유롭게 직무를 생성하지 않고, 사전에 정한 판단 규칙과 taxonomy 안에서만 분류합니다."
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "LLM은 자유롭게 직무를 생성하지 않고, 사전에 정한 판단 규칙과 taxonomy 안에서만 분류합니다.",
+          "runs": [
+            {
+              "index": 1,
+              "text": "LLM은 자유롭게 직무를 생성하지 않고, 사전에 정한 판단 규칙과 taxonomy 안에서만 분류합니다.",
+              "fontSize": 20,
+              "color": "#475569"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 5,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/xc3ylc7u",
+      "id": "300",
+      "name": "CardBg",
+      "bbox": [
+        64,
+        261.33,
+        693.33,
+        237.33
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#FFFFFF",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1.33
+    },
+    {
+      "order": 6,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4r65wjud",
+      "id": "301",
+      "name": "NumBg",
+      "bbox": [
+        85.33,
+        285.33,
+        42.67,
+        42.67
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#EEF2FF"
+    },
+    {
+      "order": 7,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/f6dcbulw",
+      "id": "302",
+      "name": "Num",
+      "bbox": [
+        85.33,
+        285.33,
+        42.67,
+        42.67
+      ],
+      "geometry": "rect",
+      "text": "1",
+      "textPreview": "1",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "1"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "1",
+          "runs": [
+            {
+              "index": 1,
+              "text": "1",
+              "fontSize": 20,
+              "color": "#4338CA",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 8,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/mlkjm1cf",
+      "id": "303",
+      "name": "CardTitle",
+      "bbox": [
+        144,
+        288,
+        586.67,
+        40
+      ],
+      "geometry": "rect",
+      "text": "정답 후보 제한",
+      "textPreview": "정답 후보 제한",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "정답 후보 제한"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "정답 후보 제한",
+          "runs": [
+            {
+              "index": 1,
+              "text": "정답 후보 제한",
+              "fontSize": 22.67,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 9,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/xkf6dcbu",
+      "id": "304",
+      "name": "CardBody",
+      "bbox": [
+        90.67,
+        344,
+        645.33,
+        133.33
+      ],
+      "geometry": "rect",
+      "text": "사내 taxonomy에 존재하는 조합만 선택\n없는 직무명이나 임의 계층 생성 불가",
+      "textPreview": "사내 taxonomy에 존재하는 조합만 선택 | 없는 직무명이나 임의 계층 생성 불가",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 4,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          },
+          {
+            "index": 2,
+            "text": "• 사내 taxonomy에 존재하는 조합만 선택"
+          },
+          {
+            "index": 3,
+            "text": ""
+          },
+          {
+            "index": 4,
+            "text": "• 없는 직무명이나 임의 계층 생성 불가"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "사내 taxonomy에 존재하는 조합만 선택",
+          "runs": [
+            {
+              "index": 1,
+              "text": "사내 taxonomy에 존재하는 조합만 선택",
+              "fontSize": 18.67,
+              "color": "#334155"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "text": "없는 직무명이나 임의 계층 생성 불가",
+          "runs": [
+            {
+              "index": 1,
+              "text": "없는 직무명이나 임의 계층 생성 불가",
+              "fontSize": 18.67,
+              "color": "#334155"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 10,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/4zidonyd",
+      "id": "305",
+      "name": "CardBg",
+      "bbox": [
+        778.67,
+        261.33,
+        693.33,
+        237.33
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#FFFFFF",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1.33
+    },
+    {
+      "order": 11,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/fepkzupw",
+      "id": "306",
+      "name": "NumBg",
+      "bbox": [
+        800,
+        285.33,
+        42.67,
+        42.67
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#ECFEFF"
+    },
+    {
+      "order": 12,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/mtwra5gb",
+      "id": "307",
+      "name": "Num",
+      "bbox": [
+        800,
+        285.33,
+        42.67,
+        42.67
+      ],
+      "geometry": "rect",
+      "text": "2",
+      "textPreview": "2",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "2"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "2",
+          "runs": [
+            {
+              "index": 1,
+              "text": "2",
+              "fontSize": 20,
+              "color": "#0E7490",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 13,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/xobm58z2",
+      "id": "308",
+      "name": "CardTitle",
+      "bbox": [
+        858.67,
+        288,
+        586.67,
+        40
+      ],
+      "geometry": "rect",
+      "text": "실제 수행 업무 우선",
+      "textPreview": "실제 수행 업무 우선",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "실제 수행 업무 우선"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "실제 수행 업무 우선",
+          "runs": [
+            {
+              "index": 1,
+              "text": "실제 수행 업무 우선",
+              "fontSize": 22.67,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 14,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/83itgfml",
+      "id": "309",
+      "name": "CardBody",
+      "bbox": [
+        805.33,
+        344,
+        645.33,
+        133.33
+      ],
+      "geometry": "rect",
+      "text": "self_review의 업무 동사·산출물·검증 활동을 기준으로 판단\n단순 키워드보다 \"무슨 일을 했는지\"를 우선 해석",
+      "textPreview": "self_review의 업무 동사·산출물·검증 활동을 기준으로 판단 | 단순 키워드보다 \"무슨 일을 했는지\"를 우선 해석",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 4,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          },
+          {
+            "index": 2,
+            "text": "• self_review의 업무 동사·산출물·검증 활동을 기준으로 판단"
+          },
+          {
+            "index": 3,
+            "text": ""
+          },
+          {
+            "index": 4,
+            "text": "• 단순 키워드보다 \"무슨 일을 했는지\"를 우선 해석"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "self_review의 업무 동사·산출물·검증 활동을 기준으로 판단",
+          "runs": [
+            {
+              "index": 1,
+              "text": "self_review의 업무 동사·산출물·검증 활동을 기준으로 판단",
+              "fontSize": 18.67,
+              "color": "#334155"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "text": "단순 키워드보다 \"무슨 일을 했는지\"를 우선 해석",
+          "runs": [
+            {
+              "index": 1,
+              "text": "단순 키워드보다 \"무슨 일을 했는지\"를 우선 해석",
+              "fontSize": 18.67,
+              "color": "#334155"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 15,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/i5sneloj",
+      "id": "310",
+      "name": "CardBg",
+      "bbox": [
+        64,
+        517.33,
+        693.33,
+        237.33
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#FFFFFF",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1.33
+    },
+    {
+      "order": 16,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7qpg3ex0",
+      "id": "311",
+      "name": "NumBg",
+      "bbox": [
+        85.33,
+        541.33,
+        42.67,
+        42.67
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#FEF3C7"
+    },
+    {
+      "order": 17,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/0bi9s36h",
+      "id": "312",
+      "name": "Num",
+      "bbox": [
+        85.33,
+        541.33,
+        42.67,
+        42.67
+      ],
+      "geometry": "rect",
+      "text": "3",
+      "textPreview": "3",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "3"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "3",
+          "runs": [
+            {
+              "index": 1,
+              "text": "3",
+              "fontSize": 20,
+              "color": "#B45309",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 18,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/pwb2hwfy",
+      "id": "313",
+      "name": "CardTitle",
+      "bbox": [
+        144,
+        544,
+        586.67,
+        40
+      ],
+      "geometry": "rect",
+      "text": "제품명 오해 방지",
+      "textPreview": "제품명 오해 방지",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "제품명 오해 방지"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "제품명 오해 방지",
+          "runs": [
+            {
+              "index": 1,
+              "text": "제품명 오해 방지",
+              "fontSize": 22.67,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 19,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ed8v6psf",
+      "id": "314",
+      "name": "CardBody",
+      "bbox": [
+        90.67,
+        600,
+        645.33,
+        133.33
+      ],
+      "geometry": "rect",
+      "text": "DRAM, NAND, Device명은 대상 제품 정보로만 참고\n제품명이 있다고 중직무를 바로 소자/공정으로 확정하지 않음",
+      "textPreview": "DRAM, NAND, Device명은 대상 제품 정보로만 참고 | 제품명이 있다고 중직무를 바로 소자/공정으로 확정하지 않음",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 4,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          },
+          {
+            "index": 2,
+            "text": "• DRAM, NAND, Device명은 대상 제품 정보로만 참고"
+          },
+          {
+            "index": 3,
+            "text": ""
+          },
+          {
+            "index": 4,
+            "text": "• 제품명이 있다고 중직무를 바로 소자/공정으로 확정하지 않음"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "DRAM, NAND, Device명은 대상 제품 정보로만 참고",
+          "runs": [
+            {
+              "index": 1,
+              "text": "DRAM, NAND, Device명은 대상 제품 정보로만 참고",
+              "fontSize": 18.67,
+              "color": "#334155"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "text": "제품명이 있다고 중직무를 바로 소자/공정으로 확정하지 않음",
+          "runs": [
+            {
+              "index": 1,
+              "text": "제품명이 있다고 중직무를 바로 소자/공정으로 확정하지 않음",
+              "fontSize": 18.67,
+              "color": "#334155"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 20,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/7y1kre1w",
+      "id": "315",
+      "name": "CardBg",
+      "bbox": [
+        778.67,
+        517.33,
+        693.33,
+        237.33
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#FFFFFF",
+      "lineColor": "#E2E8F0",
+      "lineWidth": 1.33
+    },
+    {
+      "order": 21,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/wjudg7ad",
+      "id": "316",
+      "name": "NumBg",
+      "bbox": [
+        800,
+        541.33,
+        42.67,
+        42.67
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#D1FAE5"
+    },
+    {
+      "order": 22,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/p4r65wju",
+      "id": "317",
+      "name": "Num",
+      "bbox": [
+        800,
+        541.33,
+        42.67,
+        42.67
+      ],
+      "geometry": "rect",
+      "text": "4",
+      "textPreview": "4",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "4"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "4",
+          "runs": [
+            {
+              "index": 1,
+              "text": "4",
+              "fontSize": 20,
+              "color": "#047857",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 23,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ih4byhgn",
+      "id": "318",
+      "name": "CardTitle",
+      "bbox": [
+        858.67,
+        544,
+        586.67,
+        40
+      ],
+      "geometry": "rect",
+      "text": "진단 데이터 보조 근거",
+      "textPreview": "진단 데이터 보조 근거",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "진단 데이터 보조 근거"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "진단 데이터 보조 근거",
+          "runs": [
+            {
+              "index": 1,
+              "text": "진단 데이터 보조 근거",
+              "fontSize": 22.67,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 24,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/72x4nap4",
+      "id": "319",
+      "name": "CardBody",
+      "bbox": [
+        805.33,
+        600,
+        645.33,
+        133.33
+      ],
+      "geometry": "rect",
+      "text": "진단 당시 team, 직무명, Category, 항목을 구조화된 보조 근거로 사용\n예: DRAM공정 > DPC, Etch공정, CLN, MLM",
+      "textPreview": "진단 당시 team, 직무명, Category, 항목을 구조화된 보조 근거로 사용 | 예: DRAM공정 > DPC, Etch공정, CLN, MLM",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 4,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          },
+          {
+            "index": 2,
+            "text": "• 진단 당시 team, 직무명, Category, 항목을 구조화된 보조 근거로 사용"
+          },
+          {
+            "index": 3,
+            "text": ""
+          },
+          {
+            "index": 4,
+            "text": "• 예: DRAM공정 > DPC, Etch공정, CLN, MLM"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "진단 당시 team, 직무명, Category, 항목을 구조화된 보조 근거로 사용",
+          "runs": [
+            {
+              "index": 1,
+              "text": "진단 당시 team, 직무명, Category, 항목을 구조화된 보조 근거로 사용",
+              "fontSize": 18.67,
+              "color": "#334155"
+            }
+          ]
+        },
+        {
+          "index": 2,
+          "text": "예: DRAM공정 > DPC, Etch공정, CLN, MLM",
+          "runs": [
+            {
+              "index": 1,
+              "text": "예: DRAM공정 > DPC, Etch공정, CLN, MLM",
+              "fontSize": 18.67,
+              "color": "#334155"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 25,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ji5snelo",
+      "id": "320",
+      "name": "StripBg",
+      "bbox": [
+        64,
+        776,
+        1408,
+        48
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#F1F5F9",
+      "lineColor": "#CBD5E1",
+      "lineWidth": 1.33
+    },
+    {
+      "order": 26,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/uxc3ylc7",
+      "id": "321",
+      "name": "StripTagBg",
+      "bbox": [
+        85.33,
+        786.67,
+        122.67,
+        26.67
+      ],
+      "geometry": "roundRect",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": ""
+          }
+        ]
+      },
+      "fillColor": "#1E293B"
+    },
+    {
+      "order": 27,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/1kre1w7m",
+      "id": "322",
+      "name": "StripTag",
+      "bbox": [
+        85.33,
+        786.67,
+        122.67,
+        26.67
+      ],
+      "geometry": "rect",
+      "text": "검수 분리",
+      "textPreview": "검수 분리",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "검수 분리"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "검수 분리",
+          "runs": [
+            {
+              "index": 1,
+              "text": "검수 분리",
+              "fontSize": 13.33,
+              "color": "#FFFFFF",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 28,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/c3ylc7u5",
+      "id": "323",
+      "name": "StripText",
+      "bbox": [
+        224,
+        786.67,
+        1226.67,
+        29.33
+      ],
+      "geometry": "rect",
+      "text": "확실한 건 자동 분류하고, 근거가 부족하거나 충돌하는 건 needs_review=True로 검수 대상 분리",
+      "textPreview": "확실한 건 자동 분류하고, 근거가 부족하거나 충돌하는 건 needs_review=True로 검수 대상 분리",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "확실한 건 자동 분류하고, 근거가 부족하거나 충돌하는 건 needs_review=True로 검수 대상 분리"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "확실한 건 자동 분류하고, 근거가 부족하거나 충돌하는 건 needs_review=True로 검수 대상 분리",
+          "runs": [
+            {
+              "index": 1,
+              "text": "확실한 건 자동 분류하고, 근거가 부족하거나 충돌하는 건 ",
+              "fontSize": 16,
+              "color": "#0F172A",
+              "bold": true
+            },
+            {
+              "index": 2,
+              "text": "needs_review=True",
+              "fontSize": 16,
+              "color": "#B91C1C",
+              "bold": true
+            },
+            {
+              "index": 3,
+              "text": "로 검수 대상 분리",
+              "fontSize": 16,
+              "color": "#0F172A",
+              "bold": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 29,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/j6tovaho",
+      "id": "324",
+      "name": "FL",
+      "bbox": [
+        64,
+        832,
+        533.33,
+        24
+      ],
+      "geometry": "rect",
+      "text": "LLM 판단 가이드 룰",
+      "textPreview": "LLM 판단 가이드 룰",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "LLM 판단 가이드 룰"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "LLM 판단 가이드 룰",
+          "runs": [
+            {
+              "index": 1,
+              "text": "LLM 판단 가이드 룰",
+              "fontSize": 13.33,
+              "color": "#94A3B8"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "order": 30,
+      "kind": "shape",
+      "scope": "slide",
+      "aid": "sh/ulwval87",
+      "id": "325",
+      "name": "FR",
+      "bbox": [
+        1386.67,
+        832,
+        85.33,
+        24
+      ],
+      "geometry": "rect",
+      "text": "3/4",
+      "textPreview": "3/4",
+      "resolvedFontSize": 24,
+      "resolvedTextStyle": {
+        "fontSize": 24,
+        "typeface": "+mn-lt",
+        "alignment": "left"
+      },
+      "textLayout": {
+        "lineCount": 1,
+        "lines": [
+          {
+            "index": 1,
+            "text": "3/4"
+          }
+        ]
+      },
+      "paragraphs": [
+        {
+          "index": 1,
+          "text": "3/4",
+          "runs": [
+            {
+              "index": 1,
+              "text": "3/4",
+              "fontSize": 13.33,
+              "color": "#94A3B8"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "composeRuns": []
+}

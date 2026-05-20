@@ -1,0 +1,111 @@
+{
+  "sourcePptx": "/Users/jk/Downloads/hi_feedback_job_classification_overview_image_deck.pptx",
+  "workspace": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-flowchart-update/presentations/job-classification-flowchart",
+  "outDir": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-flowchart-update/presentations/job-classification-flowchart/template-inspect",
+  "generatedAt": "2026-05-19T04:40:46.287Z",
+  "slideCount": 4,
+  "slideArtifacts": [
+    {
+      "slide": 1,
+      "previewPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-flowchart-update/presentations/job-classification-flowchart/template-inspect/source-slides/source-slide-01.png",
+      "previewRelativePath": "template-inspect/source-slides/source-slide-01.png",
+      "layoutPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-flowchart-update/presentations/job-classification-flowchart/template-inspect/layouts/source-slide-01.layout.json",
+      "layoutRelativePath": "template-inspect/layouts/source-slide-01.layout.json"
+    },
+    {
+      "slide": 2,
+      "previewPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-flowchart-update/presentations/job-classification-flowchart/template-inspect/source-slides/source-slide-02.png",
+      "previewRelativePath": "template-inspect/source-slides/source-slide-02.png",
+      "layoutPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-flowchart-update/presentations/job-classification-flowchart/template-inspect/layouts/source-slide-02.layout.json",
+      "layoutRelativePath": "template-inspect/layouts/source-slide-02.layout.json"
+    },
+    {
+      "slide": 3,
+      "previewPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-flowchart-update/presentations/job-classification-flowchart/template-inspect/source-slides/source-slide-03.png",
+      "previewRelativePath": "template-inspect/source-slides/source-slide-03.png",
+      "layoutPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-flowchart-update/presentations/job-classification-flowchart/template-inspect/layouts/source-slide-03.layout.json",
+      "layoutRelativePath": "template-inspect/layouts/source-slide-03.layout.json"
+    },
+    {
+      "slide": 4,
+      "previewPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-flowchart-update/presentations/job-classification-flowchart/template-inspect/source-slides/source-slide-04.png",
+      "previewRelativePath": "template-inspect/source-slides/source-slide-04.png",
+      "layoutPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-flowchart-update/presentations/job-classification-flowchart/template-inspect/layouts/source-slide-04.layout.json",
+      "layoutRelativePath": "template-inspect/layouts/source-slide-04.layout.json"
+    }
+  ],
+  "inspectPath": "/Users/jk/projects/python/llm-categorizing/outputs/manual-20260519-flowchart-update/presentations/job-classification-flowchart/template-inspect/template-inspect.ndjson",
+  "inspectRelativePath": "template-inspect/template-inspect.ndjson",
+  "inspectTruncated": true,
+  "inspectMetadata": {
+    "revision": "axyncw",
+    "target": {
+      "id": "pr/lc2yl6"
+    },
+    "kind": {
+      "requested": "slide,textbox,shape,image,table,chart",
+      "tokens": [
+        "slide",
+        "textbox",
+        "shape",
+        "image",
+        "table",
+        "chart"
+      ]
+    },
+    "include": {
+      "tokens": []
+    },
+    "exclude": {
+      "tokens": []
+    },
+    "notices": []
+  },
+  "extractedMedia": [],
+  "fonts": [
+    "+mj-cs",
+    "+mj-ea",
+    "+mj-lt",
+    "+mn-cs",
+    "+mn-ea",
+    "+mn-lt",
+    "Angsana New",
+    "Arial",
+    "Cordia New",
+    "DaunPenh",
+    "DokChampa",
+    "Estrangelo Edessa",
+    "Euphemia",
+    "Gautami",
+    "Iskoola Pota",
+    "Kalinga",
+    "Kartika",
+    "Latha",
+    "MV Boli",
+    "Mangal",
+    "Microsoft Himalaya",
+    "Microsoft Uighur",
+    "Microsoft Yi Baiti",
+    "Mongolian Baiti",
+    "MoolBoran",
+    "Nyala",
+    "Plantagenet Cherokee",
+    "Pretendard",
+    "Raavi",
+    "Shruti",
+    "Sylfaen",
+    "Times New Roman",
+    "Tunga",
+    "Vrinda",
+    "宋体",
+    "新細明體",
+    "맑은 고딕",
+    "ＭＳ Ｐゴシック"
+  ],
+  "packageParts": {
+    "mediaCount": 0,
+    "slideXmlCount": 4,
+    "chartCount": 0,
+    "tableSlideCount": 0
+  }
+}
