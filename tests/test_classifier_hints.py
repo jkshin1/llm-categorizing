@@ -111,6 +111,106 @@ def test_classifier_uses_only_retrieved_user_knowledge_as_hints(tmp_path) -> Non
     assert "AlphaTask 참고 지식" in hints[0]
 
 
+def test_classifier_applies_global_hint_cap(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "공정",
+                "소직무": "A1",
+                "Device": "",
+                "단위 직무": "Alpha",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "소자",
+                "소직무": "B1",
+                "Device": "",
+                "단위 직무": "Beta",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    for index in range(4):
+        store.add(
+            f"Alias{index} 표현은 후보 검토에 참고",
+            KnowledgeDraft(
+                title=f"Alias{index} 참고 지식",
+                aliases=[f"Alias{index}"],
+                hint=f"Alias{index} 표현을 참고한다.",
+                priority=80,
+                confidence=0.8,
+            ),
+        )
+    classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(max_knowledge_hints=2),
+        knowledge_store=store,
+    )
+    diagnosis_context = DiagnosisContext(
+        year="2025",
+        emp_num="E0001",
+        row_count=1,
+        teams=["공정팀 소자팀"],
+        job_names=[],
+        categories=[],
+        evidence_rows=[],
+    )
+
+    knowledge_items = classifier._retrieve_knowledge(
+        "Alias0 Alias1 Alias2 Alias3 수행",
+        diagnosis_context,
+    )
+    hints = classifier._build_classification_hints(
+        "Alias0 Alias1 Alias2 Alias3 수행",
+        diagnosis_context=diagnosis_context,
+        knowledge_items=knowledge_items,
+    )
+
+    assert len(hints) == 2
+
+
+def test_cache_key_includes_confidence_review_threshold() -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "A",
+                "소직무": "A1",
+                "Device": "",
+                "단위 직무": "Alpha",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            }
+        ]
+    )
+    settings = LLMSettings(
+        base_url="http://localhost:1/v1",
+        api_key="test",
+        model="test",
+    )
+    low_threshold = OpenAICompatibleJobClassifier(
+        settings=settings,
+        taxonomy=taxonomy,
+        config=ClassificationConfig(confidence_review_threshold=0.6),
+    )
+    high_threshold = OpenAICompatibleJobClassifier(
+        settings=settings,
+        taxonomy=taxonomy,
+        config=ClassificationConfig(confidence_review_threshold=0.8),
+    )
+
+    assert low_threshold._cache_key('{"self_review": "x"}') != high_threshold._cache_key(
+        '{"self_review": "x"}'
+    )
+
+
 def test_classifier_does_not_retrieve_knowledge_from_diagnosis_items(tmp_path) -> None:
     taxonomy = Taxonomy.from_rows(
         [

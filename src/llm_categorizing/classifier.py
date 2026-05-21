@@ -27,6 +27,7 @@ from llm_categorizing.taxonomy import TAXONOMY_COLUMNS, Taxonomy, normalize_cell
 
 
 _THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>\s*", flags=re.IGNORECASE | re.DOTALL)
+_HARD_DIAGNOSIS_MATCH_MIN_SCORE = 1000
 
 
 def extract_json_object(text: str) -> dict[str, Any]:
@@ -387,23 +388,29 @@ class OpenAICompatibleJobClassifier:
 
         reasons: list[str] = []
         sub_job = self._best_column_match("소직무", diagnosis_context.job_names)
-        unit_job = None if sub_job else self._best_column_match("단위 직무", diagnosis_context.job_names)
+        hard_sub_job = sub_job if sub_job and _is_hard_diagnosis_match(sub_job[2]) else None
+        unit_job = (
+            None
+            if hard_sub_job
+            else self._best_column_match("단위 직무", diagnosis_context.job_names)
+        )
+        hard_unit_job = unit_job if unit_job and _is_hard_diagnosis_match(unit_job[2]) else None
 
         major_job = ""
-        inferred_sub_job = sub_job[0] if sub_job else ""
+        inferred_sub_job = hard_sub_job[0] if hard_sub_job else ""
 
-        if sub_job:
-            reasons.append(f"진단 직무명 '{sub_job[1]}' -> 소직무 '{sub_job[0]}'")
-            sub_pairs = self._pairs_for_column_value("소직무", sub_job[0])
+        if hard_sub_job:
+            reasons.append(f"진단 직무명 '{hard_sub_job[1]}' -> 소직무 '{hard_sub_job[0]}'")
+            sub_pairs = self._pairs_for_column_value("소직무", hard_sub_job[0])
             if len(sub_pairs) == 1:
                 major_job = sub_pairs[0]["중직무"]
-        elif unit_job:
-            unit_pairs = self._pairs_for_column_value("단위 직무", unit_job[0])
+        elif hard_unit_job:
+            unit_pairs = self._pairs_for_column_value("단위 직무", hard_unit_job[0])
             if len(unit_pairs) == 1:
                 major_job = unit_pairs[0]["중직무"]
                 inferred_sub_job = unit_pairs[0]["소직무"]
                 reasons.append(
-                    f"진단 직무명 '{unit_job[1]}' -> 단위 직무 '{unit_job[0]}'"
+                    f"진단 직무명 '{hard_unit_job[1]}' -> 단위 직무 '{hard_unit_job[0]}'"
                 )
 
         return DiagnosisPriority(
@@ -542,7 +549,7 @@ class OpenAICompatibleJobClassifier:
                 )
             )
 
-        return hints
+        return hints[: max(0, self.config.max_knowledge_hints)]
 
     def _diagnosis_team_major_hints(
         self,
@@ -753,6 +760,8 @@ class OpenAICompatibleJobClassifier:
             "max_tokens": self.settings.max_tokens,
             "extra_body": self.settings.extra_body or {},
             "include_team": self.config.include_team_in_prompt,
+            "confidence_review_threshold": self.config.confidence_review_threshold,
+            "diagnosis_hard_match_policy": "exact_or_compact_exact_v1",
             "knowledge_review_scope": self.config.knowledge_review_scope,
             "prompt_version": PROMPT_VERSION,
         }
@@ -806,6 +815,10 @@ def _text_match_score(target: object, source: object) -> int:
     if len(source_compact) >= 2 and source_compact in target_compact:
         return 600 + len(source_compact)
     return 0
+
+
+def _is_hard_diagnosis_match(score: int) -> bool:
+    return score >= _HARD_DIAGNOSIS_MATCH_MIN_SCORE
 
 
 def _job_path_text(classification: dict[str, object]) -> str:

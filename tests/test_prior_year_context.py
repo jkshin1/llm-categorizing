@@ -73,7 +73,13 @@ def test_build_previous_year_context_uses_successful_previous_classification_onl
     }
 
     context = build_previous_year_context(2023, previous)
+    string_context = build_previous_year_context(
+        2023,
+        {**previous, "confidence": "0.88", "needs_review": "False"},
+    )
     failed_context = build_previous_year_context(2023, {**previous, "error": "failed"})
+    review_context = build_previous_year_context(2023, {**previous, "needs_review": True})
+    low_confidence_context = build_previous_year_context(2023, {**previous, "confidence": 0.59})
 
     assert context == {
         "year": "2023",
@@ -89,7 +95,10 @@ def test_build_previous_year_context_uses_successful_previous_classification_onl
         "needs_review": False,
         "reason": "전년도 업무",
     }
+    assert string_context == context
     assert failed_context is None
+    assert review_context is None
+    assert low_confidence_context is None
 
 
 def test_classifier_includes_previous_year_classification_in_prompt_and_output() -> None:

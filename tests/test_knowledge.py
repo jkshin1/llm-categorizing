@@ -42,6 +42,25 @@ def test_knowledge_store_retrieves_aliases_and_updates_version(tmp_path) -> None
     assert store.version_hash() != version_before
 
 
+def test_knowledge_store_does_not_retrieve_from_target_value_only(tmp_path) -> None:
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    store.add(
+        "Heraion은 NAND 제품 프로젝트를 의미한다.",
+        KnowledgeDraft(
+            title="Heraion 제품 alias",
+            aliases=["Heraion"],
+            hint="Heraion 프로젝트명은 NAND Device 후보를 검토한다.",
+            target_device="NAND",
+            priority=80,
+            confidence=0.8,
+        ),
+    )
+
+    retrieved = store.retrieve("NAND 수율 분석을 수행했지만 프로젝트 alias 언급은 없음", limit=3)
+
+    assert retrieved == []
+
+
 def test_knowledge_store_infers_match_fields_and_scores_structured_context(tmp_path) -> None:
     store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
     team_entry = store.add(

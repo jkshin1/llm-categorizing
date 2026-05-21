@@ -258,16 +258,6 @@ class KnowledgeDraft(BaseModel):
         title = self.title or normalize_cell(raw_text)[:80]
         hint = self.hint or normalize_cell(raw_text)
         aliases = list(self.aliases)
-        for field_value in [
-            self.target_major_job,
-            self.target_sub_job,
-            self.target_device,
-            self.target_unit_job,
-            self.target_detail_job_1,
-            self.target_detail_job_2,
-        ]:
-            if field_value and normalize_key(field_value) not in {normalize_key(item) for item in aliases}:
-                aliases.append(field_value)
         match_fields = list(self.match_fields) or infer_match_fields(raw_text, self.applies_when, hint)
         return self.model_copy(
             update={
@@ -1147,18 +1137,21 @@ class JobKnowledgeStore:
         elif knowledge.knowledge_type == "correction":
             base += 1.5
 
+        alias_score = 0.0
         for alias in knowledge.aliases:
             alias_key = normalize_key(alias)
             alias_compact = compact_knowledge_key(alias)
             if len(alias_compact) < 3:
                 if alias_key and alias_key in document.tokens:
-                    score += 8.0 + base
+                    alias_score += 8.0 + base
                 continue
             if alias_key and alias_key in document.key:
-                score += 12.0 + base
+                alias_score += 12.0 + base
             elif alias_compact and alias_compact in document.compact:
-                score += 10.0 + base
+                alias_score += 10.0 + base
+        score += alias_score
 
+        boost_score = 0.0
         for target_value in [
             knowledge.target_major_job,
             knowledge.target_sub_job,
@@ -1169,7 +1162,7 @@ class JobKnowledgeStore:
         ]:
             target_compact = compact_knowledge_key(target_value)
             if len(target_compact) >= 3 and target_compact in document.compact:
-                score += 3.0
+                boost_score += 3.0
 
         knowledge_words = knowledge_tokens(
             " ".join(
@@ -1183,8 +1176,10 @@ class JobKnowledgeStore:
         )
         token_overlap = len(document.tokens.intersection(knowledge_words))
         if token_overlap >= 2:
-            score += min(8.0, token_overlap * 1.5)
+            boost_score += min(8.0, token_overlap * 1.5)
 
+        if score > 0:
+            score += boost_score
         return score
 
     def _match_field_multiplier(self, knowledge: JobKnowledge, field: str) -> float:

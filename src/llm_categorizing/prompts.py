@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 
-PROMPT_VERSION = "job-classification-v12-near-hard-knowledge"
+PROMPT_VERSION = "job-classification-v13-quality-guards"
 
 
 ORGANIZATION_CONTEXT = """[조직 배경]

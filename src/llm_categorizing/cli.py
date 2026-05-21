@@ -171,7 +171,11 @@ def main(argv: list[str] | None = None) -> int:
         previous_year_context = None
         if employee_key and year_number is not None:
             previous_result = previous_results.get((employee_key, year_number - 1))
-            previous_year_context = build_previous_year_context(year_number - 1, previous_result)
+            previous_year_context = build_previous_year_context(
+                year_number - 1,
+                previous_result,
+                min_confidence=args.confidence_review_threshold,
+            )
 
         result = classifier.classify_row(
             row,
@@ -296,8 +300,15 @@ def parse_year_number(value: object) -> int | None:
 def build_previous_year_context(
     previous_year: int,
     previous_result: dict[str, Any] | None,
+    *,
+    min_confidence: float = 0.6,
 ) -> dict[str, Any] | None:
     if not previous_result or previous_result.get("error"):
+        return None
+    if parse_bool_value(previous_result.get("needs_review", True), default=True):
+        return None
+    confidence = parse_confidence_value(previous_result.get("confidence", 0.0))
+    if confidence < min_confidence:
         return None
     classification = {
         column: normalize_cell(previous_result.get(column, ""))
@@ -308,10 +319,31 @@ def build_previous_year_context(
     return {
         "year": str(previous_year),
         "classification": classification,
-        "confidence": previous_result.get("confidence", 0.0),
-        "needs_review": previous_result.get("needs_review", True),
+        "confidence": confidence,
+        "needs_review": False,
         "reason": normalize_cell(previous_result.get("reason", "")),
     }
+
+
+def parse_confidence_value(value: object) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(1.0, parsed))
+
+
+def parse_bool_value(value: object, *, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = normalize_cell(value).casefold()
+    if not text:
+        return default
+    if text in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "f", "no", "n", "off"}:
+        return False
+    return default
 
 
 def json_list(value: object) -> str:

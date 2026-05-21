@@ -92,6 +92,47 @@ def test_diagnosis_job_name_can_fall_back_to_unique_unit_job_pair() -> None:
     assert "단위 직무 '불량분석'" in priority.reason
 
 
+def test_diagnosis_partial_job_name_does_not_hard_limit_pair() -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "소자",
+                "소직무": "PI",
+                "Device": "",
+                "단위 직무": "공정통합",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "품질",
+                "소직무": "QA",
+                "Device": "",
+                "단위 직무": "불량분석",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    classifier = _classifier(taxonomy)
+    diagnosis_context = DiagnosisContext(
+        year="2025",
+        emp_num="E0002",
+        row_count=1,
+        teams=[],
+        job_names=["공정"],
+        categories=[],
+        evidence_rows=[],
+    )
+
+    priority = classifier._diagnosis_priority(diagnosis_context)
+    pair_candidates, pair_reason = classifier._diagnosis_pair_candidates(priority)
+
+    assert priority.major_job == ""
+    assert priority.sub_job == ""
+    assert pair_candidates == classifier.taxonomy.pairs()
+    assert pair_reason == ""
+
+
 def test_diagnosis_single_pair_skips_stage1_but_keeps_all_devices_for_llm() -> None:
     classifier = _classifier(_taxonomy())
     diagnosis_context = DiagnosisContext(

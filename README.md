@@ -184,6 +184,15 @@ python classify_jobs.py --no-diagnosis
 python classify_jobs.py --knowledge-db-path ""
 ```
 
+정답 라벨 CSV가 있으면 분류 결과를 수치로 평가할 수 있습니다. 정답 CSV는 `year`,
+`emp_num`과 taxonomy 6개 컬럼을 포함해야 합니다.
+
+```bat
+python evaluate_classification.py ^
+  --predictions data\output\classified_jobs.csv ^
+  --gold data\input\classified_jobs_gold.csv
+```
+
 ## 지식 입력 페이지
 
 분류 판단에 필요한 도메인 지식은 간단한 로컬 페이지에서 추가할 수 있습니다. 입력된 원문은 그대로 저장하고, LLM이 제목/매칭 용어/적용 조건/힌트/관련 taxonomy 계층으로 정리한 구조화 데이터도 함께 SQLite에 저장합니다.
@@ -265,9 +274,9 @@ error,input_truncated,taxonomy_version,model_name,classified_at
 ## 분류 방식
 
 1. 진단 CSV가 있으면 `year + emp_num`으로 매칭된 `team`, `진단 시 직무명`을 먼저 봅니다.
-2. `진단 시 직무명`이 taxonomy의 `소직무`와 매칭되면 해당 `중직무`/`소직무` 후보를 우선 사용합니다. `소직무` 매칭이 없지만 taxonomy의 `단위 직무`와 유일하게 매칭되면 그 row의 `중직무`/`소직무`를 사용합니다.
+2. `진단 시 직무명`이 taxonomy의 `소직무`와 정확히 매칭되면 해당 `중직무`/`소직무` 후보를 우선 사용합니다. `소직무` 정확 매칭이 없지만 taxonomy의 `단위 직무`와 유일하게 정확 매칭되면 그 row의 `중직무`/`소직무`를 사용합니다. 부분 문자열 매칭은 후보 제한에 쓰지 않습니다.
 3. diagnosis의 `team`은 후보를 강제로 제한하지 않습니다. 다만 team에 taxonomy `중직무` 값이 직접 포함되면 soft hint로 전달하고, `TD -> 소자`, `Heraion -> NAND` 같은 사내 조직/프로젝트/제품 alias는 지식 DB에서 검색된 `classification_hints`로 LLM에 전달합니다.
-4. 실행 순서는 구성원별 `year` 오름차순입니다. 같은 구성원의 직전 연도 결과가 있으면 `previous_year_classification`으로 prompt에 넣어 직무 연속성 참고 정보로 사용합니다.
+4. 실행 순서는 구성원별 `year` 오름차순입니다. 같은 구성원의 직전 연도 결과가 있고 `needs_review=False`, confidence가 검토 threshold 이상이면 `previous_year_classification`으로 prompt에 넣어 직무 연속성 참고 정보로 사용합니다.
 5. diagnosis로 후보가 하나로 좁혀지지 않으면 남은 `중직무`/`소직무` 후보 중 하나를 LLM이 선택합니다.
 6. 선택된 pair의 하위 taxonomy row만 후보로 넣어 최종 계층을 선택합니다.
 7. 최종 결과가 taxonomy CSV의 row와 정확히 일치하는지 검증합니다.
@@ -277,10 +286,10 @@ error,input_truncated,taxonomy_version,model_name,classified_at
 
 - 코드에 내장된 직무별 키워드 룰은 사용하지 않습니다.
 - 입력 CSV의 `self_review`와 선택 입력인 `diagnosis_context`는 LLM에 근거 데이터로 전달합니다. `diagnosis_context`에는 diagnosis `team`, `진단 시 직무명`, `Category` 요약만 넣고 `항목` 값은 넣지 않습니다.
-- diagnosis의 `진단 시 직무명`은 taxonomy에 실제 존재하는 값과 매칭될 때만 `중직무`/`소직무` 후보 제한에 사용합니다. 적용 여부는 `diagnosis_priority_reason` 컬럼에 기록됩니다.
+- diagnosis의 `진단 시 직무명`은 taxonomy에 실제 존재하는 값과 정확히 매칭될 때만 `중직무`/`소직무` 후보 제한에 사용합니다. 적용 여부는 `diagnosis_priority_reason` 컬럼에 기록됩니다. 부분 문자열 단서는 prompt 참고 정보로만 남기고 hard restrict에는 쓰지 않습니다.
 - diagnosis의 `team`은 후보 제한 rule로 쓰지 않고, 직접 보이는 taxonomy 중직무 표현과 지식 DB에 저장된 alias/제품 지식을 LLM 판단 근거로 전달합니다. `TD` 같은 2글자 alias도 team에서 독립 token으로 매칭되면 지식 검색에 사용합니다.
-- 직전 연도 결과는 같은 `emp_num`의 `year-1` 결과가 있고 오류가 없을 때만 사용합니다. 현재 연도 self_review/diagnosis와 충돌하면 현재 연도 근거를 우선하도록 prompt에 명시합니다.
-- 사용자가 지식 입력 페이지로 추가한 지식은 `self_review`, diagnosis `team`, 진단 직무명, category를 분리해서 검색한 뒤 점수가 높은 일부만 `classification_hints`에 넣습니다. diagnosis `항목` 값은 지식 검색에도 사용하지 않습니다. 결과 CSV의 `used_knowledge_ids`, `used_knowledge_types`, `used_knowledge_scores`, `used_knowledge_enforcement_levels`, `used_knowledge_match_fields`, `knowledge_version`으로 어떤 지식이 쓰였는지 추적할 수 있습니다.
+- 직전 연도 결과는 같은 `emp_num`의 `year-1` 결과가 있고 오류가 없으며 `needs_review=False`, confidence가 검토 threshold 이상일 때만 사용합니다. 현재 연도 self_review/diagnosis와 충돌하면 현재 연도 근거를 우선하도록 prompt에 명시합니다.
+- 사용자가 지식 입력 페이지로 추가한 지식은 `self_review`, diagnosis `team`, 진단 직무명, category를 분리해서 검색한 뒤 점수가 높은 일부만 `classification_hints`에 넣습니다. target taxonomy 값만으로 지식을 검색하지 않고 alias 매칭이 있을 때 target/본문 overlap을 boost로만 사용합니다. diagnosis `항목` 값은 지식 검색에도 사용하지 않습니다. 결과 CSV의 `used_knowledge_ids`, `used_knowledge_types`, `used_knowledge_scores`, `used_knowledge_enforcement_levels`, `used_knowledge_match_fields`, `knowledge_version`으로 어떤 지식이 쓰였는지 추적할 수 있습니다.
 - 지식 DB에는 `knowledge_type`, `review_status`, `enforcement_level`, `match_fields`, `conflicts`를 저장합니다. `승격`은 `strong`, `준하드룰`은 `near_hard`로 저장됩니다. `near_hard` 지식은 검색 점수와 프롬프트에서 가장 강하게 전달되며, 적용 조건과 매칭 용어가 현재 입력에 명확히 맞으면 LLM이 사실상 우선 적용하도록 안내합니다. 다만 taxonomy 후보 목록 밖 값을 만들지는 않습니다.
 - 같은 raw 지식이 다시 들어오면 새 row를 만들지 않고 기존 row에 alias/source/priority를 병합합니다. 같은 alias가 서로 다른 target을 가리키면 `conflicts`와 검증 경고로 표시해 사람이 확인할 수 있게 합니다.
 - 분류 시 검색된 지식은 `knowledge_usage` 테이블에 `classification_id`, `knowledge_id`, `match_score`, 최종 분류 결과와 함께 기록되어 나중에 어떤 지식이 실제 분류에 자주 쓰였는지 점검할 수 있습니다.
