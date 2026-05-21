@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import re
@@ -25,6 +26,7 @@ SUPPORTED_KNOWLEDGE_TYPES = {
     "verified_rule",
 }
 SUPPORTED_REVIEW_STATUSES = {"draft", "approved", "rejected"}
+_THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>\s*", flags=re.IGNORECASE | re.DOTALL)
 
 KNOWLEDGE_NORMALIZATION_SYSTEM_PROMPT = """너는 사내 직무 분류 지식을 정리하는 데이터 관리자다.
 사용자가 입력한 자연어 지식을 직무 분류기가 참고할 수 있는 구조화 JSON으로 바꾼다.
@@ -87,7 +89,7 @@ def _utc_now() -> str:
 
 
 def _extract_json_object(text: str) -> dict[str, Any]:
-    stripped = text.strip()
+    stripped = _strip_thinking_blocks(text).strip()
     if stripped.startswith("```"):
         stripped = stripped.strip("`")
         if stripped.lower().startswith("json"):
@@ -102,6 +104,10 @@ def _extract_json_object(text: str) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValueError("LLM response JSON is not an object")
     return parsed
+
+
+def _strip_thinking_blocks(text: str) -> str:
+    return _THINK_BLOCK_RE.sub("", text)
 
 
 class KnowledgeDraft(BaseModel):
@@ -769,8 +775,9 @@ class KnowledgeNormalizer:
         }
         if self.settings.use_json_response_format:
             payload["response_format"] = {"type": "json_object"}
-        if self.settings.extra_body:
-            payload["extra_body"] = self.settings.extra_body
+        extra_body = _knowledge_normalizer_extra_body(self.settings)
+        if extra_body:
+            payload["extra_body"] = extra_body
 
         completion = self.client.chat.completions.create(**payload)
         content = completion.choices[0].message.content
@@ -785,6 +792,21 @@ class KnowledgeNormalizer:
         if self.taxonomy:
             draft = validate_draft_against_taxonomy(draft, self.taxonomy)
         return draft
+
+
+def _knowledge_normalizer_extra_body(settings: LLMSettings) -> dict[str, Any] | None:
+    extra_body = copy.deepcopy(settings.extra_body) if settings.extra_body else {}
+    if settings.provider_profile != "qwen":
+        return extra_body or None
+
+    if "enable_thinking" in extra_body:
+        extra_body["enable_thinking"] = False
+
+    chat_template_kwargs = extra_body.setdefault("chat_template_kwargs", {})
+    if not isinstance(chat_template_kwargs, dict):
+        raise ValueError("extra_body.chat_template_kwargs must be a JSON object")
+    chat_template_kwargs["enable_thinking"] = False
+    return extra_body
 
 
 def taxonomy_reference_json(taxonomy: Taxonomy, *, max_values_per_column: int = 120) -> str:

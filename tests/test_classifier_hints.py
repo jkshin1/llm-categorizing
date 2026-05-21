@@ -1,4 +1,4 @@
-from llm_categorizing.classifier import ClassificationConfig, OpenAICompatibleJobClassifier
+from llm_categorizing.classifier import ClassificationConfig, OpenAICompatibleJobClassifier, extract_json_object
 from llm_categorizing.config import LLMSettings
 from llm_categorizing.diagnosis import DiagnosisContext
 from llm_categorizing.knowledge import JobKnowledgeStore, KnowledgeDraft
@@ -59,6 +59,14 @@ def test_classifier_does_not_build_hardcoded_rule_hints() -> None:
     assert hints == []
     assert not hasattr(classifier, "_apply_process_guardrail")
     assert not hasattr(classifier, "_apply_diagnosis_guardrail")
+
+
+def test_classifier_json_extraction_ignores_thinking_block() -> None:
+    parsed = extract_json_object(
+        '<think>{"중직무": "무시"}</think>\n\n{"중직무": "공정", "소직무": "Etch"}'
+    )
+
+    assert parsed == {"중직무": "공정", "소직무": "Etch"}
 
 
 def test_classifier_uses_only_retrieved_user_knowledge_as_hints(tmp_path) -> None:

@@ -6,6 +6,8 @@ from llm_categorizing.diagnosis import DiagnosisContext
 from llm_categorizing.knowledge import (
     JobKnowledgeStore,
     KnowledgeDraft,
+    _extract_json_object,
+    _knowledge_normalizer_extra_body,
     validate_draft_against_taxonomy,
 )
 from llm_categorizing.taxonomy import Taxonomy
@@ -37,6 +39,29 @@ def test_knowledge_store_retrieves_aliases_and_updates_version(tmp_path) -> None
 
     assert store.retrieve("Alpha Task 수행 및 BetaReview 결과 검토", limit=3) == []
     assert store.version_hash() != version_before
+
+
+def test_knowledge_normalizer_forces_qwen_thinking_off() -> None:
+    settings = LLMSettings(
+        base_url="http://localhost:1/v1",
+        api_key="test",
+        model="Qwen3.6-35B-A3B",
+        extra_body={"top_k": 20, "chat_template_kwargs": {"enable_thinking": True}},
+        provider_profile="qwen",
+    )
+
+    extra_body = _knowledge_normalizer_extra_body(settings)
+
+    assert extra_body == {"top_k": 20, "chat_template_kwargs": {"enable_thinking": False}}
+    assert settings.extra_body == {"top_k": 20, "chat_template_kwargs": {"enable_thinking": True}}
+
+
+def test_knowledge_json_extraction_ignores_thinking_block() -> None:
+    parsed = _extract_json_object(
+        '<think>{"draft": "ignored"}</think>\n\n{"title": "Alpha", "aliases": ["A"]}'
+    )
+
+    assert parsed == {"title": "Alpha", "aliases": ["A"]}
 
 
 def test_classifier_includes_retrieved_knowledge_in_hints(tmp_path) -> None:

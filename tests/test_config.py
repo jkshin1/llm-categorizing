@@ -13,17 +13,20 @@ def _base_env(monkeypatch, model: str) -> None:
     monkeypatch.setenv("LLM_PROVIDER_PROFILE", "auto")
     monkeypatch.setenv("LLM_MAX_TOKENS", "")
     monkeypatch.setenv("LLM_EXTRA_BODY_JSON", "")
+    monkeypatch.setenv("LLM_QWEN_DISABLE_THINKING", "")
+    monkeypatch.setenv("LLM_QWEN_THINKING_MAX_TOKENS", "4096")
     monkeypatch.setenv("LLM_QWEN_EXTRA_BODY_JSON", "")
     monkeypatch.setenv("LLM_GLM_EXTRA_BODY_JSON", "")
 
 
-def test_qwen_model_disables_thinking_by_default(monkeypatch) -> None:
+def test_qwen_model_enables_thinking_by_default(monkeypatch) -> None:
     _base_env(monkeypatch, "Qwen3.6-35B-A3B")
 
     settings = LLMSettings.from_env()
 
     assert settings.provider_profile == "qwen"
-    assert settings.extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
+    assert settings.max_tokens == 4096
+    assert settings.extra_body == {"chat_template_kwargs": {"enable_thinking": True}}
 
 
 def test_extra_body_json_is_merged(monkeypatch) -> None:
@@ -34,23 +37,22 @@ def test_extra_body_json_is_merged(monkeypatch) -> None:
 
     assert settings.extra_body == {
         "top_k": 20,
-        "chat_template_kwargs": {"enable_thinking": False},
+        "chat_template_kwargs": {"enable_thinking": True},
     }
 
 
-def test_qwen_thinking_enabled_sets_extra_body_and_larger_tokens(monkeypatch) -> None:
+def test_qwen_thinking_can_be_disabled(monkeypatch) -> None:
     _base_env(monkeypatch, "Qwen3.6-35B-A3B")
-    monkeypatch.setenv("LLM_QWEN_DISABLE_THINKING", "0")
+    monkeypatch.setenv("LLM_QWEN_DISABLE_THINKING", "1")
 
     settings = LLMSettings.from_env()
 
-    assert settings.max_tokens == 4096
-    assert settings.extra_body == {"chat_template_kwargs": {"enable_thinking": True}}
+    assert settings.max_tokens == 1200
+    assert settings.extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
 
 
 def test_explicit_max_tokens_overrides_qwen_thinking_default(monkeypatch) -> None:
     _base_env(monkeypatch, "Qwen3.6-35B-A3B")
-    monkeypatch.setenv("LLM_QWEN_DISABLE_THINKING", "0")
     monkeypatch.setenv("LLM_MAX_TOKENS", "8192")
 
     settings = LLMSettings.from_env()
@@ -60,7 +62,6 @@ def test_explicit_max_tokens_overrides_qwen_thinking_default(monkeypatch) -> Non
 
 def test_small_explicit_max_tokens_is_bumped_for_qwen_thinking(monkeypatch) -> None:
     _base_env(monkeypatch, "Qwen3.6-35B-A3B")
-    monkeypatch.setenv("LLM_QWEN_DISABLE_THINKING", "0")
     monkeypatch.setenv("LLM_MAX_TOKENS", "1200")
 
     settings = LLMSettings.from_env()
@@ -98,7 +99,7 @@ def test_profile_can_be_forced(monkeypatch) -> None:
     settings = LLMSettings.from_env()
 
     assert settings.provider_profile == "qwen"
-    assert settings.extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
+    assert settings.extra_body == {"chat_template_kwargs": {"enable_thinking": True}}
 
 
 def test_alibaba_endpoint_profile_uses_alibaba_env(monkeypatch) -> None:

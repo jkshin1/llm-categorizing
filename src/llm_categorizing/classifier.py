@@ -26,8 +26,11 @@ from llm_categorizing.prompts import (
 from llm_categorizing.taxonomy import TAXONOMY_COLUMNS, Taxonomy, normalize_cell
 
 
+_THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>\s*", flags=re.IGNORECASE | re.DOTALL)
+
+
 def extract_json_object(text: str) -> dict[str, Any]:
-    stripped = text.strip()
+    stripped = _strip_thinking_blocks(text).strip()
     if stripped.startswith("```"):
         stripped = stripped.strip("`")
         if stripped.lower().startswith("json"):
@@ -43,6 +46,10 @@ def extract_json_object(text: str) -> dict[str, Any]:
     if not isinstance(parsed, dict):
         raise ValueError("LLM response JSON is not an object")
     return parsed
+
+
+def _strip_thinking_blocks(text: str) -> str:
+    return _THINK_BLOCK_RE.sub("", text)
 
 
 @dataclass
@@ -721,6 +728,10 @@ class OpenAICompatibleJobClassifier:
             "taxonomy_version": self.taxonomy.version_hash(),
             "knowledge_version": self._knowledge_version(),
             "model": self.settings.model,
+            "provider_profile": self.settings.provider_profile,
+            "temperature": self.settings.temperature,
+            "max_tokens": self.settings.max_tokens,
+            "extra_body": self.settings.extra_body or {},
             "include_team": self.config.include_team_in_prompt,
             "prompt_version": PROMPT_VERSION,
         }

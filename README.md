@@ -55,7 +55,7 @@ ALIBABA_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 ALIBABA_API_KEY=replace-me
 ALIBABA_MODEL=qwen-plus
 LLM_PROVIDER_PROFILE=qwen
-LLM_QWEN_DISABLE_THINKING=1
+LLM_QWEN_DISABLE_THINKING=0
 ```
 
 사내 endpoint가 OpenAI의 `response_format={"type":"json_object"}` 옵션을 지원하지 않으면 `LLM_USE_JSON_RESPONSE_FORMAT=0`을 유지하세요.
@@ -68,13 +68,13 @@ LLM_PROVIDER_PROFILE=glm
 LLM_PROVIDER_PROFILE=generic
 ```
 
-Qwen3/Qwen3.6 계열 모델은 thinking mode 때문에 OpenAI-compatible API의 `message.content`가 빈 값으로 내려오는 경우가 있습니다. Qwen 프로파일은 기본적으로 아래 옵션을 요청 body에 추가합니다.
+Qwen3/Qwen3.6 계열 모델은 분류 품질을 우선해 기본적으로 thinking mode를 사용합니다. Qwen 프로파일은 기본적으로 아래 옵션을 요청 body에 추가합니다.
 
 ```text
-LLM_QWEN_DISABLE_THINKING=1
+LLM_QWEN_DISABLE_THINKING=0
 ```
 
-thinking mode를 켜려면 아래처럼 설정하세요. 이때 `LLM_MAX_TOKENS`를 비워두면 Qwen thinking용 기본값 `LLM_QWEN_THINKING_MAX_TOKENS=4096`을 사용합니다.
+이때 `LLM_MAX_TOKENS`를 비워두면 Qwen thinking용 기본값 `LLM_QWEN_THINKING_MAX_TOKENS=4096`을 사용합니다.
 
 ```text
 LLM_QWEN_DISABLE_THINKING=0
@@ -92,6 +92,8 @@ LLM_QWEN_THINKING_MAX_TOKENS=8192
 ```text
 LLM_QWEN_EXTRA_BODY_JSON={"chat_template_kwargs":{"enable_thinking":true}}
 ```
+
+지식 입력 페이지의 메모리/지식 저장 정리 호출은 분류 호출과 달리 hallucination을 줄이는 것이 더 중요하므로, Qwen 프로파일에서도 코드가 `enable_thinking=false`를 별도로 요청합니다.
 
 GLM 계열은 Qwen 전용 extra body를 보내지 않습니다. GLM에 별도 옵션이 필요할 때만 GLM 전용 값을 넣으세요.
 

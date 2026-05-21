@@ -205,7 +205,7 @@ def _profile_extra_body_env_name(provider_profile: str) -> str:
 
 
 def _qwen_thinking_disabled(model: str, provider_profile: str) -> bool:
-    return provider_profile == "qwen" and _env_bool("LLM_QWEN_DISABLE_THINKING", True)
+    return provider_profile == "qwen" and _env_bool("LLM_QWEN_DISABLE_THINKING", False)
 
 
 def _qwen_thinking_enabled(model: str, provider_profile: str) -> bool:
