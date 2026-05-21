@@ -308,6 +308,10 @@ INDEX_HTML = """<!doctype html>
       background: #fff4e5;
       color: #9a5b00;
     }
+    .badge.danger {
+      background: #fef3f2;
+      color: var(--danger);
+    }
     .hint {
       line-height: 1.5;
       white-space: pre-wrap;
@@ -462,6 +466,18 @@ INDEX_HTML = """<!doctype html>
         const validationErrors = (entry.validation_errors || [])
           .map((error) => `<span class="chip">${escapeHtml(error)}</span>`)
           .join("");
+        const matchFields = (entry.match_fields || [])
+          .map((field) => `<span class="chip">${escapeHtml(field)}</span>`)
+          .join("");
+        const conflicts = (entry.conflicts || [])
+          .map((conflict) => {
+            const field = conflict.field || "target";
+            const existing = conflict.existing_value || "";
+            const next = conflict.new_value || "";
+            const title = conflict.title || conflict.knowledge_id || "";
+            return `<span class="chip">${escapeHtml(field)}: ${escapeHtml(existing)} ↔ ${escapeHtml(next)} · ${escapeHtml(title)}</span>`;
+          })
+          .join("");
         const isVerified = entry.knowledge_type === "verified_rule" || entry.review_status === "approved";
         return `
           <article class="item ${entry.active ? "" : "inactive"}" data-id="${escapeHtml(entry.id)}">
@@ -479,12 +495,16 @@ INDEX_HTML = """<!doctype html>
             <div class="badges">
               <span class="badge">${escapeHtml(entry.knowledge_type)}</span>
               <span class="badge">${escapeHtml(entry.review_status)}</span>
+              ${matchFields ? '<span class="badge">적용 입력</span>' : ""}
               ${validationErrors ? '<span class="badge warn">검증 경고</span>' : ""}
+              ${conflicts ? '<span class="badge danger">충돌 확인</span>' : ""}
             </div>
             <div class="hint">${escapeHtml(entry.hint)}</div>
             ${target ? `<div class="meta">${escapeHtml(target)}</div>` : ""}
+            ${matchFields ? `<div class="chips">${matchFields}</div>` : ""}
             ${aliases ? `<div class="chips">${aliases}</div>` : ""}
             ${validationErrors ? `<div class="chips">${validationErrors}</div>` : ""}
+            ${conflicts ? `<div class="chips">${conflicts}</div>` : ""}
           </article>
         `;
       }).join("");

@@ -96,6 +96,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-diagnosis-rows-per-employee", type=int, default=50)
     parser.add_argument("--max-candidates-per-prompt", type=int, default=300)
     parser.add_argument("--max-knowledge-hints", type=int, default=8)
+    parser.add_argument(
+        "--knowledge-review-scope",
+        choices=["usable", "approved"],
+        default="usable",
+        help="분류에 사용할 지식 범위. usable은 active draft/approved를 모두 검색하고, approved는 승인 지식만 사용",
+    )
     parser.add_argument("--validation-attempts", type=int, default=2)
     parser.add_argument("--api-retry-attempts", type=int, default=5)
     parser.add_argument("--confidence-review-threshold", type=float, default=0.6)
@@ -139,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         max_review_chars=args.max_review_chars,
         max_candidates_per_prompt=args.max_candidates_per_prompt,
         max_knowledge_hints=args.max_knowledge_hints,
+        knowledge_review_scope=args.knowledge_review_scope,
         validation_attempts=args.validation_attempts,
         api_retry_attempts=args.api_retry_attempts,
         confidence_review_threshold=args.confidence_review_threshold,
@@ -218,6 +225,14 @@ def build_output_row(
             "previous_year_needs_review": result.get("previous_year_needs_review", ""),
             "used_knowledge_ids": json_list(result.get("used_knowledge_ids", [])),
             "used_knowledge_types": json_list(result.get("used_knowledge_types", [])),
+            "used_knowledge_scores": json_list(result.get("used_knowledge_scores", [])),
+            "used_knowledge_review_statuses": json_list(
+                result.get("used_knowledge_review_statuses", [])
+            ),
+            "used_knowledge_match_fields": json_list(
+                result.get("used_knowledge_match_fields", [])
+            ),
+            "knowledge_review_scope": result.get("knowledge_review_scope", ""),
             "knowledge_version": result.get("knowledge_version", ""),
             **{
                 key: result.get(key, default)

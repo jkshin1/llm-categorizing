@@ -5,6 +5,7 @@ from llm_categorizing.config import LLMSettings
 from llm_categorizing.diagnosis import DiagnosisContext
 from llm_categorizing.knowledge import (
     JobKnowledgeStore,
+    KnowledgeSearchContext,
     KnowledgeDraft,
     _extract_json_object,
     _knowledge_normalizer_extra_body,
@@ -39,6 +40,100 @@ def test_knowledge_store_retrieves_aliases_and_updates_version(tmp_path) -> None
 
     assert store.retrieve("Alpha Task 수행 및 BetaReview 결과 검토", limit=3) == []
     assert store.version_hash() != version_before
+
+
+def test_knowledge_store_infers_match_fields_and_scores_structured_context(tmp_path) -> None:
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    team_entry = store.add(
+        "Heraion team은 NAND 제품 프로젝트를 의미한다.",
+        KnowledgeDraft(
+            title="Heraion team alias",
+            aliases=["Heraion"],
+            hint="team에 Heraion이 있으면 NAND Device 후보를 검토한다.",
+            target_device="NAND",
+            priority=70,
+            confidence=0.7,
+        ),
+    )
+    review_entry = store.add(
+        "Heraion 업무 표현은 리뷰 텍스트에서만 참고한다.",
+        KnowledgeDraft(
+            title="Heraion review alias",
+            aliases=["Heraion"],
+            match_fields=["self_review"],
+            hint="self_review에서 Heraion이 있으면 일반 참고로만 본다.",
+            priority=70,
+            confidence=0.7,
+        ),
+    )
+
+    retrieved = store.retrieve_for_context(
+        KnowledgeSearchContext(diagnosis_teams=("Heraion PJT > Heraion TD",)),
+        limit=2,
+    )
+
+    assert "diagnosis_team" in team_entry.match_fields
+    assert retrieved[0].id == team_entry.id
+    assert {item.id for item in retrieved} == {team_entry.id, review_entry.id}
+
+
+def test_knowledge_store_merges_duplicate_raw_text(tmp_path) -> None:
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    first = store.add(
+        "TD 조직명은 중직무 소자를 의미한다.",
+        KnowledgeDraft(aliases=["TD"], target_major_job="소자", priority=50),
+    )
+    second = store.add(
+        "TD 조직명은 중직무 소자를 의미한다.",
+        KnowledgeDraft(aliases=["TD", "Technology Development"], target_major_job="소자", priority=80),
+        source="txt_import",
+    )
+
+    entries = store.list_recent(limit=10)
+
+    assert first.id == second.id
+    assert len(entries) == 1
+    assert "Technology Development" in entries[0].aliases
+    assert entries[0].priority == 80
+
+
+def test_knowledge_store_marks_conflicting_targets(tmp_path) -> None:
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    store.add(
+        "Heraion은 NAND 제품을 의미한다.",
+        KnowledgeDraft(aliases=["Heraion"], target_device="NAND"),
+    )
+
+    conflicting = store.add(
+        "Heraion은 DRAM 제품을 의미한다.",
+        KnowledgeDraft(aliases=["Heraion"], target_device="DRAM"),
+    )
+
+    assert conflicting.conflicts
+    assert conflicting.review_status == "draft"
+    assert any("potential conflict" in error for error in conflicting.validation_errors)
+
+
+def test_knowledge_store_can_retrieve_only_approved_entries(tmp_path) -> None:
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    draft = store.add(
+        "AlphaTask 초안 지식",
+        KnowledgeDraft(aliases=["AlphaTask"], hint="초안 지식"),
+    )
+    approved = store.add(
+        "AlphaTask 검증 지식",
+        KnowledgeDraft(
+            knowledge_type="verified_rule",
+            aliases=["AlphaTask"],
+            hint="검증 지식",
+        ),
+    )
+
+    usable = store.retrieve("AlphaTask 수행", limit=5)
+    approved_only = store.retrieve("AlphaTask 수행", limit=5, review_scope="approved")
+
+    assert {item.id for item in usable} == {draft.id, approved.id}
+    assert [item.id for item in approved_only] == [approved.id]
 
 
 def test_knowledge_normalizer_forces_qwen_thinking_off() -> None:

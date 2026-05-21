@@ -42,7 +42,7 @@ copy .env.example .env
 LLM_ENDPOINT_PROFILE=internal
 INTERNAL_LLM_BASE_URL=https://your-internal-llm-endpoint/v1
 INTERNAL_LLM_API_KEY=replace-me
-INTERNAL_LLM_MODEL=your-internal-model-name
+INTERNAL_LLM_MODEL=qwen3.6-35b-a3b
 LLM_PROVIDER_PROFILE=auto
 LLM_TIMEOUT_SECONDS=300
 ```
@@ -74,7 +74,7 @@ Qwen3/Qwen3.6 계열 모델은 분류 품질을 우선해 기본적으로 thinki
 LLM_QWEN_DISABLE_THINKING=0
 ```
 
-이때 `LLM_MAX_TOKENS`를 비워두면 Qwen thinking용 기본값 `LLM_QWEN_THINKING_MAX_TOKENS=4096`을 사용합니다.
+사내에서 `qwen3.6-35b-a3b`를 쓸 때는 `LLM_PROVIDER_PROFILE=auto` 또는 `qwen`으로 두면 분류 판단 호출은 thinking mode로 동작합니다. 이때 `LLM_MAX_TOKENS`를 비워두면 Qwen thinking용 기본값 `LLM_QWEN_THINKING_MAX_TOKENS=4096`을 사용합니다.
 
 ```text
 LLM_QWEN_DISABLE_THINKING=0
@@ -176,6 +176,12 @@ python serve_knowledge.py --knowledge-db-path data\output\job_knowledge.sqlite3
 python classify_jobs.py --knowledge-db-path data\output\job_knowledge.sqlite3
 ```
 
+검증 완료된 지식만 분류에 쓰고 싶으면 아래처럼 실행합니다.
+
+```bash
+python classify_jobs.py --knowledge-review-scope approved
+```
+
 지식 입력 페이지는 기본적으로 `data/input/taxonomy.csv`가 있으면 LLM 정리 시 taxonomy 참고값을 함께 전달하고, 저장 전 target 값이 실제 taxonomy에 있는지 검증합니다. 다른 taxonomy를 쓰려면:
 
 ```bat
@@ -212,7 +218,8 @@ year,team,emp_num,name,
 중직무,소직무,Device,단위 직무,세부 직무1,세부 직무2,
 confidence,reason,needs_review,ambiguity_reason,guardrail_reason,diagnosis_priority_reason,
 previous_year,previous_year_job_path,previous_year_confidence,previous_year_needs_review,
-used_knowledge_ids,used_knowledge_types,knowledge_version,
+used_knowledge_ids,used_knowledge_types,used_knowledge_scores,
+used_knowledge_review_statuses,used_knowledge_match_fields,knowledge_review_scope,knowledge_version,
 diagnosis_row_count,diagnosis_teams,diagnosis_job_names,diagnosis_categories,diagnosis_items,
 error,input_truncated,taxonomy_version,model_name,classified_at
 ```
@@ -243,8 +250,9 @@ error,input_truncated,taxonomy_version,model_name,classified_at
 - diagnosis의 `진단 시 직무명`은 taxonomy에 실제 존재하는 값과 매칭될 때만 `중직무`/`소직무` 후보 제한에 사용합니다. 적용 여부는 `diagnosis_priority_reason` 컬럼에 기록됩니다.
 - diagnosis의 `team`은 후보 제한 rule로 쓰지 않고, 직접 보이는 taxonomy 중직무 표현과 지식 DB에 저장된 alias/제품 지식을 LLM 판단 근거로 전달합니다. `TD` 같은 2글자 alias도 team에서 독립 token으로 매칭되면 지식 검색에 사용합니다.
 - 직전 연도 결과는 같은 `emp_num`의 `year-1` 결과가 있고 오류가 없을 때만 사용합니다. 현재 연도 self_review/diagnosis와 충돌하면 현재 연도 근거를 우선하도록 prompt에 명시합니다.
-- 사용자가 지식 입력 페이지로 추가한 지식은 self_review와 매칭되는 항목만 `classification_hints`에 넣습니다. 결과 CSV의 `used_knowledge_ids`, `used_knowledge_types`, `knowledge_version`으로 어떤 지식이 쓰였는지 추적할 수 있습니다.
-- 지식 DB에는 `knowledge_type`과 `review_status`를 저장합니다. `verified_rule` 또는 `approved` 지식은 prompt에서 더 강한 참고 지식으로 전달하지만, 자동 보정은 하지 않습니다.
+- 사용자가 지식 입력 페이지로 추가한 지식은 `self_review`, diagnosis `team`, 진단 직무명, category, item을 분리해서 검색한 뒤 점수가 높은 일부만 `classification_hints`에 넣습니다. 결과 CSV의 `used_knowledge_ids`, `used_knowledge_types`, `used_knowledge_scores`, `used_knowledge_match_fields`, `knowledge_version`으로 어떤 지식이 쓰였는지 추적할 수 있습니다.
+- 지식 DB에는 `knowledge_type`, `review_status`, `match_fields`, `conflicts`를 저장합니다. `verified_rule` 또는 `approved` 지식은 prompt에서 더 강한 참고 지식으로 전달하지만, 자동 보정은 하지 않습니다.
+- 같은 raw 지식이 다시 들어오면 새 row를 만들지 않고 기존 row에 alias/source/priority를 병합합니다. 같은 alias가 서로 다른 target을 가리키면 `conflicts`와 검증 경고로 표시해 사람이 확인할 수 있게 합니다.
 - 분류 시 검색된 지식은 `knowledge_usage` 테이블에 `classification_id`, `knowledge_id`, `match_score`, 최종 분류 결과와 함께 기록되어 나중에 어떤 지식이 실제 분류에 자주 쓰였는지 점검할 수 있습니다.
 - taxonomy 중복 단위직무를 후보에 별도 주의 정보로 주입하던 로직도 분류 판단에서는 제거했습니다. `ambiguity_reason` 컬럼은 과거 출력 스키마 호환을 위해 남아 있지만 새 분류에서는 빈 값입니다.
 - 기존 룰 기반 자동 보정은 제거했습니다. `guardrail_reason` 컬럼은 과거 출력 스키마 호환을 위해 남아 있지만 새 분류에서는 빈 값입니다.

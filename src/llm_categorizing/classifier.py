@@ -13,7 +13,7 @@ from tenacity import Retrying, retry_if_exception_type, stop_after_attempt, wait
 
 from llm_categorizing.config import LLMSettings
 from llm_categorizing.diagnosis import DiagnosisContext, empty_diagnosis_output_payload
-from llm_categorizing.knowledge import JobKnowledge, JobKnowledgeStore
+from llm_categorizing.knowledge import JobKnowledge, JobKnowledgeStore, KnowledgeSearchContext
 from llm_categorizing.models import FinalClassificationResult, Stage1Result
 from llm_categorizing.prompts import (
     PROMPT_VERSION,
@@ -58,6 +58,7 @@ class ClassificationConfig:
     max_review_chars: int = 12000
     max_candidates_per_prompt: int = 300
     max_knowledge_hints: int = 8
+    knowledge_review_scope: str = "usable"
     validation_attempts: int = 2
     api_retry_attempts: int = 5
     confidence_review_threshold: float = 0.6
@@ -184,7 +185,13 @@ class OpenAICompatibleJobClassifier:
         )
         result["used_knowledge_ids"] = [item.id for item in knowledge_items]
         result["used_knowledge_types"] = [item.knowledge_type for item in knowledge_items]
+        result["used_knowledge_scores"] = [round(item.match_score, 3) for item in knowledge_items]
+        result["used_knowledge_review_statuses"] = [item.review_status for item in knowledge_items]
+        result["used_knowledge_match_fields"] = [
+            ",".join(item.match_fields) for item in knowledge_items
+        ]
         result["knowledge_version"] = self._knowledge_version()
+        result["knowledge_review_scope"] = self.config.knowledge_review_scope
         result.setdefault("diagnosis_priority_reason", "")
         result.update(self._previous_year_output_payload(previous_year_payload))
         result["input_truncated"] = truncated
@@ -664,12 +671,17 @@ class OpenAICompatibleJobClassifier:
     ) -> list[JobKnowledge]:
         if not self.knowledge_store:
             return []
-        search_text = review
-        if diagnosis_context:
-            search_text = f"{review} {self._diagnosis_text(diagnosis_context)}"
-        return self.knowledge_store.retrieve(
-            search_text,
+        context = KnowledgeSearchContext(
+            self_review=review,
+            diagnosis_teams=tuple(diagnosis_context.teams if diagnosis_context else []),
+            diagnosis_job_names=tuple(diagnosis_context.job_names if diagnosis_context else []),
+            diagnosis_categories=tuple(diagnosis_context.categories if diagnosis_context else []),
+            diagnosis_items=tuple(diagnosis_context.items if diagnosis_context else []),
+        )
+        return self.knowledge_store.retrieve_for_context(
+            context,
             limit=self.config.max_knowledge_hints,
+            review_scope=self.config.knowledge_review_scope,
         )
 
     def _diagnosis_text(self, diagnosis_context: DiagnosisContext) -> str:
@@ -733,6 +745,7 @@ class OpenAICompatibleJobClassifier:
             "max_tokens": self.settings.max_tokens,
             "extra_body": self.settings.extra_body or {},
             "include_team": self.config.include_team_in_prompt,
+            "knowledge_review_scope": self.config.knowledge_review_scope,
             "prompt_version": PROMPT_VERSION,
         }
         raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
