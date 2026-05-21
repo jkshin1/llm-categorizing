@@ -4,6 +4,7 @@ from llm_categorizing.classifier import ClassificationConfig, OpenAICompatibleJo
 from llm_categorizing.cli import build_output_row
 from llm_categorizing.config import LLMSettings
 from llm_categorizing.diagnosis import DiagnosisContext
+from llm_categorizing.knowledge import JobKnowledgeStore, KnowledgeDraft
 from llm_categorizing.models import FinalClassificationResult
 from llm_categorizing.taxonomy import Taxonomy
 
@@ -90,6 +91,48 @@ def test_diagnosis_job_name_can_fall_back_to_unique_unit_job_pair() -> None:
     assert priority.major_job == "품질"
     assert priority.sub_job == "Quality"
     assert "단위 직무 '불량분석'" in priority.reason
+
+
+def test_diagnosis_job_name_uses_major_signal_to_break_duplicate_sub_job() -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "공정",
+                "소직무": "Etch공정",
+                "Device": "DRAM",
+                "단위 직무": "Chamber",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "소자",
+                "소직무": "Etch공정",
+                "Device": "DRAM",
+                "단위 직무": "Device Etch",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    classifier = _classifier(taxonomy)
+    diagnosis_context = DiagnosisContext(
+        year="2025",
+        emp_num="E0001",
+        row_count=1,
+        teams=[],
+        job_names=["Etch공정"],
+        categories=[],
+        evidence_rows=[],
+    )
+
+    priority = classifier._diagnosis_priority(diagnosis_context)
+    pair_candidates, pair_reason = classifier._diagnosis_pair_candidates(priority)
+
+    assert priority.major_job == "공정"
+    assert priority.sub_job == "Etch공정"
+    assert pair_candidates == [{"중직무": "공정", "소직무": "Etch공정"}]
+    assert "중직무 직접 단서" in priority.reason
+    assert "diagnosis 우선 적용" in pair_reason
 
 
 def test_diagnosis_partial_job_name_does_not_hard_limit_pair() -> None:
@@ -181,6 +224,97 @@ def test_diagnosis_single_pair_skips_stage1_but_keeps_all_devices_for_llm() -> N
     assert result["Device"] == "NAND"
     assert result["needs_review"] is False
     assert "diagnosis 우선 적용" in result["diagnosis_priority_reason"]
+
+
+def test_diagnosis_job_name_takes_precedence_over_conflicting_near_hard_knowledge(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "공정",
+                "소직무": "Etch공정",
+                "Device": "DRAM",
+                "단위 직무": "Chamber",
+                "세부 직무1": "Clean",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "소자",
+                "소직무": "TD",
+                "Device": "NAND",
+                "단위 직무": "Cell",
+                "세부 직무1": "Integration",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "TD는 소자 후보를 우선한다.",
+        KnowledgeDraft(
+            title="TD 소자 준하드룰",
+            aliases=["TD"],
+            hint="diagnosis team에 TD가 있으면 소자 후보를 우선한다.",
+            target_major_job="소자",
+            target_sub_job="TD",
+            match_fields=["diagnosis_team"],
+        ),
+    )
+    store.update_metadata(entry.id, enforcement_level="near_hard")
+    classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(),
+        knowledge_store=store,
+    )
+    diagnosis_context = DiagnosisContext(
+        year="2025",
+        emp_num="E0001",
+        row_count=1,
+        teams=["Heraion TD"],
+        job_names=["Etch공정"],
+        categories=[],
+        evidence_rows=[],
+    )
+
+    def fail_stage1(self, context_json, candidate_pairs=None):
+        raise AssertionError("diagnosis job name should select the pair before stage1")
+
+    def fixed_stage2(self, context_json, candidates):
+        assert candidates == [taxonomy.rows[0]]
+        return FinalClassificationResult(
+            major_job="공정",
+            sub_job="Etch공정",
+            device="DRAM",
+            unit_job="Chamber",
+            detail_job_1="Clean",
+            detail_job_2="",
+            confidence=0.93,
+            needs_review=False,
+            reason="진단 직무명 Etch공정이 우선",
+        )
+
+    classifier._run_stage1 = MethodType(fail_stage1, classifier)
+    classifier._run_stage2 = MethodType(fixed_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2025",
+            "team": "",
+            "emp_num": "E0001",
+            "name": "홍길동",
+            "self_review": "TD 관련 업무",
+        },
+        diagnosis_context=diagnosis_context,
+    )
+
+    assert result["중직무"] == "공정"
+    assert result["소직무"] == "Etch공정"
+    assert "diagnosis 우선 적용" in result["diagnosis_priority_reason"]
+    assert "diagnosis 직무명 우선 적용" in result["knowledge_priority_reason"]
 
 
 def test_diagnosis_team_does_not_force_major_or_device_without_job_name() -> None:

@@ -241,14 +241,18 @@ class OpenAICompatibleJobClassifier:
         applied_priority_reasons: list[str] = []
         knowledge_priority = self._near_hard_knowledge_priority(knowledge_items)
         knowledge_priority_reasons = list(knowledge_priority.reasons)
-        if knowledge_priority.rows:
+
+        pair_candidates, pair_priority_reason = self._diagnosis_pair_candidates(diagnosis_priority)
+        if pair_priority_reason:
+            applied_priority_reasons.append(pair_priority_reason)
+            if knowledge_priority.rows:
+                knowledge_priority_reasons.append(
+                    "diagnosis 직무명 우선 적용: 준하드룰 지식은 선택된 중직무/소직무 내부의 최종 후보 제한에만 사용"
+                )
+        elif knowledge_priority.rows:
             pair_candidates, pair_priority_reason = self._knowledge_pair_candidates(knowledge_priority)
             if pair_priority_reason:
                 knowledge_priority_reasons.append(pair_priority_reason)
-        else:
-            pair_candidates, pair_priority_reason = self._diagnosis_pair_candidates(diagnosis_priority)
-            if pair_priority_reason:
-                applied_priority_reasons.append(pair_priority_reason)
 
         if len(pair_candidates) == 1:
             pair = pair_candidates[0]
@@ -526,6 +530,16 @@ class OpenAICompatibleJobClassifier:
             sub_pairs = self._pairs_for_column_value("소직무", hard_sub_job[0])
             if len(sub_pairs) == 1:
                 major_job = sub_pairs[0]["중직무"]
+            elif len(sub_pairs) > 1:
+                major_pair = self._resolve_pair_by_diagnosis_major_signal(
+                    sub_pairs,
+                    diagnosis_context.job_names + diagnosis_context.teams,
+                )
+                if major_pair:
+                    major_job = major_pair["중직무"]
+                    reasons.append(
+                        f"진단 직무명/team의 중직무 직접 단서 -> 중직무 '{major_job}'"
+                    )
         elif hard_unit_job:
             unit_pairs = self._pairs_for_column_value("단위 직무", hard_unit_job[0])
             if len(unit_pairs) == 1:
@@ -593,6 +607,40 @@ class OpenAICompatibleJobClassifier:
         if diagnosis_priority.sub_job:
             labels.append(f"소직무 '{diagnosis_priority.sub_job}'")
         return f"diagnosis 우선 적용: {', '.join(labels)} 기준 stage1 후보 제한"
+
+    def _resolve_pair_by_diagnosis_major_signal(
+        self,
+        pairs: list[dict[str, str]],
+        source_values: list[str],
+    ) -> dict[str, str] | None:
+        scored: list[tuple[int, dict[str, str], str]] = []
+        for pair in pairs:
+            major_job = normalize_cell(pair.get("중직무", ""))
+            for source_value in source_values:
+                score = _text_match_score(major_job, source_value)
+                if score:
+                    scored.append((score, pair, source_value))
+
+        if not scored:
+            return None
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+        top_score = scored[0][0]
+        winners = [
+            pair
+            for score, pair, _source_value in scored
+            if score == top_score
+        ]
+        winner_keys = {
+            (
+                normalize_cell(pair.get("중직무", "")).casefold(),
+                normalize_cell(pair.get("소직무", "")).casefold(),
+            )
+            for pair in winners
+        }
+        if len(winner_keys) != 1:
+            return None
+        return dict(winners[0])
 
     def _best_column_match(
         self,
@@ -883,8 +931,8 @@ class OpenAICompatibleJobClassifier:
             "extra_body": self.settings.extra_body or {},
             "include_team": self.config.include_team_in_prompt,
             "confidence_review_threshold": self.config.confidence_review_threshold,
-            "diagnosis_hard_match_policy": "exact_or_compact_exact_v1",
-            "near_hard_knowledge_policy": "candidate_filter_v1",
+            "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
+            "near_hard_knowledge_policy": "diagnosis_job_name_precedence_v2",
             "knowledge_review_scope": self.config.knowledge_review_scope,
             "prompt_version": PROMPT_VERSION,
         }

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 
-PROMPT_VERSION = "job-classification-v14-near-hard-candidate-filter"
+PROMPT_VERSION = "job-classification-v15-diagnosis-job-name-precedence"
 
 
 ORGANIZATION_CONTEXT = """[조직 배경]
@@ -16,7 +16,7 @@ ORGANIZATION_CONTEXT = """[조직 배경]
 DECISION_RULES = """[판단 우선순위]
 1. 후보 목록 제약: 반드시 제공된 후보 목록 안에서만 선택하고, 후보 값을 번역/요약/정규화하지 말고 그대로 복사한다.
 2. 현재 근거 우선: self_review의 실제 업무 내용과 diagnosis_context의 진단 당시 직무명을 가장 중요하게 본다.
-3. 진단 직무명 우선: diagnosis_context가 있으면 year+emp_num으로 매칭된 진단 당시 team/직무명/category 요약이다. 진단 당시 직무명은 중직무/소직무 판단의 우선 근거로 사용한다.
+3. 진단 직무명 우선: diagnosis_context가 있으면 year+emp_num으로 매칭된 진단 당시 team/직무명/category 요약이다. 진단 당시 직무명이 후보 소직무 또는 단위 직무와 명확히 맞으면 self_review나 사용자 지식보다 중직무/소직무 판단에 우선 적용한다.
 4. 조직/alias 해석: diagnosis_context의 team에는 사내 조직명, 프로젝트명, 제품 alias가 들어갈 수 있다. 조직 배경과 classification_hints를 참고하되 후보를 강제하는 rule로 쓰지 않는다.
 5. 사용자 지식: classification_hints가 있으면 저장된 지식 DB에서 입력 근거별로 검색된 참고 지식이다. 주요 적용 입력과 적용 조건이 현재 입력과 맞고 self_review/diagnosis_context와 충돌하지 않을 때만 참고한다.
    - classification_hints에 "준하드룰"이라고 표시된 지식은 사람이 특별히 강화한 지식이다. 적용 조건과 매칭 용어가 현재 입력에 명확히 맞고 후보 목록에 관련 후보 계층이 있으면 사실상 우선 적용한다.
