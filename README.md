@@ -116,6 +116,36 @@ LLM_QWEN_THINKING_MAX_TOKENS=4096
 LLM_QWEN_THINKING_MAX_TOKENS=8192
 ```
 
+Qwen3.6-35B-A3B를 분류 판단 모델로 쓸 때 품질 우선 추천값은 아래와 같습니다. 이 프로젝트는 고정 taxonomy 후보 중 하나를 고르는 정밀 분류 작업이므로, Qwen 일반 thinking 권장값보다 낮은 `temperature=0.6`과 `presence_penalty=0.0`을 우선 권장합니다.
+
+Alibaba/DashScope 계열 endpoint:
+
+```text
+CLASSIFICATION_LLM_ENDPOINT_PROFILE=alibaba
+CLASSIFICATION_ALIBABA_MODEL=Qwen3.6-35B-A3B
+CLASSIFICATION_LLM_PROVIDER_PROFILE=qwen
+CLASSIFICATION_LLM_TEMPERATURE=0.6
+CLASSIFICATION_LLM_MAX_TOKENS=
+CLASSIFICATION_LLM_QWEN_THINKING_MAX_TOKENS=8192
+CLASSIFICATION_LLM_USE_JSON_RESPONSE_FORMAT=0
+CLASSIFICATION_LLM_QWEN_DISABLE_THINKING=0
+CLASSIFICATION_LLM_QWEN_EXTRA_BODY_JSON={"enable_thinking":true,"top_p":0.95,"top_k":20,"min_p":0.0,"presence_penalty":0.0,"repetition_penalty":1.0}
+```
+
+사내 vLLM/SGLang 계열 endpoint:
+
+```text
+CLASSIFICATION_LLM_ENDPOINT_PROFILE=internal
+CLASSIFICATION_INTERNAL_LLM_MODEL=Qwen3.6-35B-A3B
+CLASSIFICATION_LLM_PROVIDER_PROFILE=qwen
+CLASSIFICATION_LLM_TEMPERATURE=0.6
+CLASSIFICATION_LLM_MAX_TOKENS=
+CLASSIFICATION_LLM_QWEN_THINKING_MAX_TOKENS=8192
+CLASSIFICATION_LLM_USE_JSON_RESPONSE_FORMAT=0
+CLASSIFICATION_LLM_QWEN_DISABLE_THINKING=0
+CLASSIFICATION_LLM_QWEN_EXTRA_BODY_JSON={"chat_template_kwargs":{"enable_thinking":true},"top_p":0.95,"top_k":20,"min_p":0.0,"presence_penalty":0.0,"repetition_penalty":1.0}
+```
+
 사내 endpoint가 Roo Code처럼 별도 body 옵션을 요구하면 `.env`에 JSON 객체로 추가할 수 있습니다.
 
 ```text
