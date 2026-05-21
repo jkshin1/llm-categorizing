@@ -32,7 +32,6 @@ SUPPORTED_MATCH_FIELDS = {
     "diagnosis_team",
     "diagnosis_job_name",
     "diagnosis_category",
-    "diagnosis_item",
     "employee_team",
     "previous_year",
 }
@@ -77,7 +76,6 @@ target_* 필드는 위 taxonomy 참고값에 존재하는 값만 사용하라.
 - diagnosis_team: 진단 데이터의 team/조직명/프로젝트명/제품 alias에 매칭될 때
 - diagnosis_job_name: 진단 시 직무명에 매칭될 때
 - diagnosis_category: 진단 category에 매칭될 때
-- diagnosis_item: 진단 item/skillset에 매칭될 때
 - employee_team: 구성원 CSV의 team 컬럼에 매칭될 때
 - previous_year: 직전 연도 분류 결과와 비교할 때
 
@@ -209,8 +207,6 @@ class KnowledgeDraft(BaseModel):
                 field = "diagnosis_job_name"
             elif field in {"category", "diagnosis_categories"}:
                 field = "diagnosis_category"
-            elif field in {"item", "skill", "skillset", "diagnosis_items"}:
-                field = "diagnosis_item"
             if field not in SUPPORTED_MATCH_FIELDS or field in seen:
                 continue
             seen.add(field)
@@ -428,7 +424,6 @@ class KnowledgeSearchContext:
     diagnosis_teams: tuple[str, ...] = ()
     diagnosis_job_names: tuple[str, ...] = ()
     diagnosis_categories: tuple[str, ...] = ()
-    diagnosis_items: tuple[str, ...] = ()
     employee_team: str = ""
     previous_year_job_path: str = ""
 
@@ -438,7 +433,6 @@ class KnowledgeSearchContext:
             ("diagnosis_team", list(self.diagnosis_teams), 1.75),
             ("diagnosis_job_name", list(self.diagnosis_job_names), 1.55),
             ("diagnosis_category", list(self.diagnosis_categories), 1.15),
-            ("diagnosis_item", list(self.diagnosis_items), 1.05),
             ("employee_team", [self.employee_team], 1.25),
             ("previous_year", [self.previous_year_job_path], 0.8),
         ]
@@ -1315,8 +1309,6 @@ def infer_match_fields(*texts: str) -> list[str]:
             fields.append("diagnosis_job_name")
         if "category" in joined or "카테고리" in joined:
             fields.append("diagnosis_category")
-        if any(term in joined for term in ["item", "skill", "skillset", "항목"]):
-            fields.append("diagnosis_item")
     elif any(term in joined for term in ["team", "팀", "조직", "pjt", "project", "프로젝트", "제품"]):
         fields.append("diagnosis_team")
 

@@ -24,7 +24,7 @@ taxonomy는 위 컬럼 순서대로 상위에서 하위로 계층화된 값이�
 year,emp_num,name,team,진단 시 직무명,Category,항목
 ```
 
-진단 CSV는 같은 `year + emp_num`에 여러 행이 있어도 됩니다. 여러 행은 한 구성원의 해당 연도 진단 근거로 묶어서 사용합니다.
+진단 CSV는 같은 `year + emp_num`에 여러 행이 있어도 됩니다. 여러 행은 한 구성원의 해당 연도 진단 근거로 묶어서 사용합니다. 단, `항목` 값은 분류 프롬프트, 지식 검색 컨텍스트, 결과 CSV에 넣지 않습니다.
 
 ## Windows 10 셋업
 
@@ -249,7 +249,7 @@ confidence,reason,needs_review,ambiguity_reason,guardrail_reason,diagnosis_prior
 previous_year,previous_year_job_path,previous_year_confidence,previous_year_needs_review,
 used_knowledge_ids,used_knowledge_types,used_knowledge_scores,
 used_knowledge_review_statuses,used_knowledge_match_fields,knowledge_review_scope,knowledge_version,
-diagnosis_row_count,diagnosis_teams,diagnosis_job_names,diagnosis_categories,diagnosis_items,
+diagnosis_row_count,diagnosis_teams,diagnosis_job_names,diagnosis_categories,
 error,input_truncated,taxonomy_version,model_name,classified_at
 ```
 
@@ -275,11 +275,11 @@ error,input_truncated,taxonomy_version,model_name,classified_at
 ## 정확도 개선 로직
 
 - 코드에 내장된 직무별 키워드 룰은 사용하지 않습니다.
-- 입력 CSV의 `self_review`와 선택 입력인 `diagnosis_context`는 LLM에 원본 근거 데이터로 전달합니다.
+- 입력 CSV의 `self_review`와 선택 입력인 `diagnosis_context`는 LLM에 근거 데이터로 전달합니다. `diagnosis_context`에는 diagnosis `team`, `진단 시 직무명`, `Category` 요약만 넣고 `항목` 값은 넣지 않습니다.
 - diagnosis의 `진단 시 직무명`은 taxonomy에 실제 존재하는 값과 매칭될 때만 `중직무`/`소직무` 후보 제한에 사용합니다. 적용 여부는 `diagnosis_priority_reason` 컬럼에 기록됩니다.
 - diagnosis의 `team`은 후보 제한 rule로 쓰지 않고, 직접 보이는 taxonomy 중직무 표현과 지식 DB에 저장된 alias/제품 지식을 LLM 판단 근거로 전달합니다. `TD` 같은 2글자 alias도 team에서 독립 token으로 매칭되면 지식 검색에 사용합니다.
 - 직전 연도 결과는 같은 `emp_num`의 `year-1` 결과가 있고 오류가 없을 때만 사용합니다. 현재 연도 self_review/diagnosis와 충돌하면 현재 연도 근거를 우선하도록 prompt에 명시합니다.
-- 사용자가 지식 입력 페이지로 추가한 지식은 `self_review`, diagnosis `team`, 진단 직무명, category, item을 분리해서 검색한 뒤 점수가 높은 일부만 `classification_hints`에 넣습니다. 결과 CSV의 `used_knowledge_ids`, `used_knowledge_types`, `used_knowledge_scores`, `used_knowledge_match_fields`, `knowledge_version`으로 어떤 지식이 쓰였는지 추적할 수 있습니다.
+- 사용자가 지식 입력 페이지로 추가한 지식은 `self_review`, diagnosis `team`, 진단 직무명, category를 분리해서 검색한 뒤 점수가 높은 일부만 `classification_hints`에 넣습니다. diagnosis `항목` 값은 지식 검색에도 사용하지 않습니다. 결과 CSV의 `used_knowledge_ids`, `used_knowledge_types`, `used_knowledge_scores`, `used_knowledge_match_fields`, `knowledge_version`으로 어떤 지식이 쓰였는지 추적할 수 있습니다.
 - 지식 DB에는 `knowledge_type`, `review_status`, `match_fields`, `conflicts`를 저장합니다. `verified_rule` 또는 `approved` 지식은 prompt에서 더 강한 참고 지식으로 전달하지만, 자동 보정은 하지 않습니다.
 - 같은 raw 지식이 다시 들어오면 새 row를 만들지 않고 기존 row에 alias/source/priority를 병합합니다. 같은 alias가 서로 다른 target을 가리키면 `conflicts`와 검증 경고로 표시해 사람이 확인할 수 있게 합니다.
 - 분류 시 검색된 지식은 `knowledge_usage` 테이블에 `classification_id`, `knowledge_id`, `match_score`, 최종 분류 결과와 함께 기록되어 나중에 어떤 지식이 실제 분류에 자주 쓰였는지 점검할 수 있습니다.

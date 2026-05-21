@@ -60,7 +60,6 @@ def test_diagnosis_priority_infers_pair_from_diagnosis_job_name_only() -> None:
         teams=["DRAM공정 > DPC"],
         job_names=["Etch공정"],
         categories=[],
-        items=[],
         evidence_rows=[],
     )
 
@@ -83,7 +82,6 @@ def test_diagnosis_job_name_can_fall_back_to_unique_unit_job_pair() -> None:
         teams=["품질분석팀"],
         job_names=["불량분석"],
         categories=[],
-        items=[],
         evidence_rows=[],
     )
 
@@ -103,7 +101,6 @@ def test_diagnosis_single_pair_skips_stage1_but_keeps_all_devices_for_llm() -> N
         teams=["DRAM공정 > DPC"],
         job_names=["Etch공정"],
         categories=[],
-        items=[],
         evidence_rows=[],
     )
 
@@ -154,7 +151,6 @@ def test_diagnosis_team_does_not_force_major_or_device_without_job_name() -> Non
         teams=["DRAM공정 > DPC"],
         job_names=[],
         categories=[],
-        items=[],
         evidence_rows=[],
     )
 
@@ -181,3 +177,4 @@ def test_output_row_includes_diagnosis_priority_reason() -> None:
     )
 
     assert output["diagnosis_priority_reason"] == "diagnosis 우선 적용"
+    assert "diagnosis_items" not in output

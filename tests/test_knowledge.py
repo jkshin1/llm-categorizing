@@ -280,7 +280,6 @@ def test_classifier_retrieves_knowledge_from_diagnosis_team_alias(tmp_path) -> N
         teams=["Heraion PJT > Heraion TD"],
         job_names=[],
         categories=[],
-        items=[],
         evidence_rows=[],
     )
 
@@ -334,7 +333,6 @@ def test_classifier_retrieves_short_team_alias_for_major_job_hint(tmp_path) -> N
         teams=["Heraion PJT > Heraion TD"],
         job_names=[],
         categories=[],
-        items=[],
         evidence_rows=[],
     )
 

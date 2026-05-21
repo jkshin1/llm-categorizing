@@ -21,17 +21,23 @@ class DiagnosisContext:
     teams: list[str]
     job_names: list[str]
     categories: list[str]
-    items: list[str]
     evidence_rows: list[dict[str, str]]
 
     def to_prompt_payload(self) -> dict[str, Any]:
+        evidence_rows = [
+            {
+                "diagnosis_team": row.get("diagnosis_team", ""),
+                "diagnosis_job_name": row.get("diagnosis_job_name", ""),
+                "category": row.get("category", ""),
+            }
+            for row in self.evidence_rows
+        ]
         return {
             "row_count": self.row_count,
             "diagnosis_teams": self.teams,
             "diagnosis_job_names": self.job_names,
             "categories": self.categories,
-            "items": self.items,
-            "evidence_rows": self.evidence_rows,
+            "evidence_rows": [row for row in evidence_rows if any(row.values())],
         }
 
     def to_output_payload(self) -> dict[str, Any]:
@@ -40,7 +46,6 @@ class DiagnosisContext:
             "diagnosis_teams": " | ".join(self.teams),
             "diagnosis_job_names": " | ".join(self.job_names),
             "diagnosis_categories": " | ".join(self.categories),
-            "diagnosis_items": " | ".join(self.items),
         }
 
 
@@ -74,7 +79,6 @@ def load_diagnosis_contexts(
             teams=_unique_values(rows, "team", max_values_per_field),
             job_names=_unique_values(rows, "진단 시 직무명", max_values_per_field),
             categories=_unique_values(rows, "Category", max_values_per_field),
-            items=_unique_values(rows, "항목", max_values_per_field),
             evidence_rows=_evidence_rows(rows, max_evidence_rows),
         )
     return contexts
@@ -90,7 +94,6 @@ def empty_diagnosis_output_payload() -> dict[str, Any]:
         "diagnosis_teams": "",
         "diagnosis_job_names": "",
         "diagnosis_categories": "",
-        "diagnosis_items": "",
     }
 
 
@@ -111,14 +114,15 @@ def _unique_values(rows: list[dict[str, str]], column: str, limit: int) -> list[
 
 def _evidence_rows(rows: list[dict[str, str]], limit: int) -> list[dict[str, str]]:
     evidence: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str, str]] = set()
+    seen: set[tuple[str, str, str]] = set()
     for row in rows:
         item = {
             "diagnosis_team": row.get("team", ""),
             "diagnosis_job_name": row.get("진단 시 직무명", ""),
             "category": row.get("Category", ""),
-            "item": row.get("항목", ""),
         }
+        if not any(item.values()):
+            continue
         key = tuple(normalize_key(value) for value in item.values())
         if key in seen:
             continue

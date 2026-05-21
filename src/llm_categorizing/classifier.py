@@ -171,7 +171,14 @@ class OpenAICompatibleJobClassifier:
         if self.cache:
             cached = self.cache.get(cache_key)
             if cached:
-                return dict(cached)
+                result = dict(cached)
+                result.update(
+                    diagnosis_context.to_output_payload()
+                    if diagnosis_context
+                    else empty_diagnosis_output_payload()
+                )
+                result.update(self._previous_year_output_payload(previous_year_payload))
+                return result
 
         try:
             result = self._classify_uncached(context_json, diagnosis_priority)
@@ -676,7 +683,6 @@ class OpenAICompatibleJobClassifier:
             diagnosis_teams=tuple(diagnosis_context.teams if diagnosis_context else []),
             diagnosis_job_names=tuple(diagnosis_context.job_names if diagnosis_context else []),
             diagnosis_categories=tuple(diagnosis_context.categories if diagnosis_context else []),
-            diagnosis_items=tuple(diagnosis_context.items if diagnosis_context else []),
         )
         return self.knowledge_store.retrieve_for_context(
             context,
@@ -689,7 +695,6 @@ class OpenAICompatibleJobClassifier:
             diagnosis_context.teams
             + diagnosis_context.job_names
             + diagnosis_context.categories
-            + diagnosis_context.items
         )
         return " ".join(fields)
 
