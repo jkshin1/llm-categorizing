@@ -488,6 +488,7 @@ INDEX_HTML = """<!doctype html>
               </div>
               <div class="row-actions">
                 <button type="button" data-action="${isVerified ? "draft" : "approve"}">${isVerified ? "초안" : "승격"}</button>
+                ${conflicts ? '<button type="button" data-action="clear-conflicts">충돌 해제</button>' : ""}
                 <button type="button" data-action="toggle">${entry.active ? "비활성" : "활성"}</button>
                 <button type="button" class="danger" data-action="delete">삭제</button>
               </div>
@@ -595,6 +596,11 @@ INDEX_HTML = """<!doctype html>
           await requestJson(`/api/knowledge/${id}/metadata`, {
             method: "POST",
             body: JSON.stringify({ knowledge_type: "soft_hint", review_status: "draft" })
+          });
+        } else if (action === "clear-conflicts") {
+          await requestJson(`/api/knowledge/${id}/metadata`, {
+            method: "POST",
+            body: JSON.stringify({ clear_conflicts: true })
           });
         } else if (action === "delete") {
           await requestJson(`/api/knowledge/${id}`, { method: "DELETE" });
@@ -821,6 +827,7 @@ class KnowledgeRequestHandler(BaseHTTPRequestHandler):
                 entry_id,
                 knowledge_type=payload.get("knowledge_type"),
                 review_status=payload.get("review_status"),
+                clear_conflicts=bool(payload.get("clear_conflicts", False)),
             )
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
             self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
@@ -890,11 +897,14 @@ def main(argv: list[str] | None = None) -> int:
 
     normalizer = None
     try:
-        normalizer = KnowledgeNormalizer(LLMSettings.from_env(), taxonomy=taxonomy)
+        normalizer = KnowledgeNormalizer(LLMSettings.from_env(role="knowledge"), taxonomy=taxonomy)
     except Exception as exc:
         if not args.allow_fallback_normalizer:
             print(f"LLM normalizer unavailable: {exc}")
-            print("Set INTERNAL_LLM_* or ALIBABA_* env vars, or run with --allow-fallback-normalizer.")
+            print(
+                "Set KNOWLEDGE_INTERNAL_LLM_* or KNOWLEDGE_ALIBABA_* env vars, "
+                "or run with --allow-fallback-normalizer."
+            )
         else:
             print(f"LLM normalizer unavailable; fallback enabled: {exc}")
 

@@ -139,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Validation completed. No LLM calls were made.")
         return 0
 
-    settings = LLMSettings.from_env()
+    settings = LLMSettings.from_env(role="classification")
     config = ClassificationConfig(
         include_team_in_prompt=args.include_team_in_prompt and not args.exclude_team_from_prompt,
         max_review_chars=args.max_review_chars,

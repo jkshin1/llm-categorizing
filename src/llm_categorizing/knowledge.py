@@ -878,6 +878,7 @@ class JobKnowledgeStore:
         *,
         knowledge_type: str | None = None,
         review_status: str | None = None,
+        clear_conflicts: bool = False,
     ) -> JobKnowledge | None:
         clean_type = normalize_cell(knowledge_type).casefold() if knowledge_type is not None else None
         clean_status = normalize_cell(review_status).casefold() if review_status is not None else None
@@ -897,6 +898,13 @@ class JobKnowledgeStore:
             if clean_status == "rejected":
                 assignments.append("active = ?")
                 values.append(0)
+            if clean_status == "approved":
+                clear_conflicts = True
+        if clear_conflicts:
+            assignments.append("conflicts_json = ?")
+            values.append("[]")
+            assignments.append("validation_errors_json = ?")
+            values.append("[]")
         if not assignments:
             with self._connect() as connection:
                 row = connection.execute(

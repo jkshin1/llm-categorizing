@@ -114,6 +114,33 @@ def test_knowledge_store_marks_conflicting_targets(tmp_path) -> None:
     assert any("potential conflict" in error for error in conflicting.validation_errors)
 
 
+def test_knowledge_store_can_clear_false_positive_conflicts(tmp_path) -> None:
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    store.add(
+        "Heraion은 NAND 제품을 의미한다.",
+        KnowledgeDraft(aliases=["Heraion"], target_device="NAND"),
+    )
+    conflicting = store.add(
+        "Heraion은 DRAM 제품도 맥락에 따라 의미할 수 있다.",
+        KnowledgeDraft(aliases=["Heraion"], target_device="DRAM"),
+    )
+
+    cleared = store.update_metadata(conflicting.id, clear_conflicts=True)
+    approved = store.update_metadata(
+        conflicting.id,
+        knowledge_type="verified_rule",
+        review_status="approved",
+    )
+
+    assert cleared is not None
+    assert cleared.conflicts == ()
+    assert cleared.validation_errors == ()
+    assert approved is not None
+    assert approved.conflicts == ()
+    assert approved.validation_errors == ()
+    assert approved.review_status == "approved"
+
+
 def test_knowledge_store_can_retrieve_only_approved_entries(tmp_path) -> None:
     store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
     draft = store.add(

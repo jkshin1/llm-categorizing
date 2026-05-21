@@ -42,9 +42,25 @@ copy .env.example .env
 LLM_ENDPOINT_PROFILE=internal
 INTERNAL_LLM_BASE_URL=https://your-internal-llm-endpoint/v1
 INTERNAL_LLM_API_KEY=replace-me
-INTERNAL_LLM_MODEL=qwen3.6-35b-a3b
+INTERNAL_LLM_MODEL=shared-default-model
 LLM_PROVIDER_PROFILE=auto
 LLM_TIMEOUT_SECONDS=300
+```
+
+분류 판단 모델과 지식 저장/메모리 정리 모델은 역할별 환경변수로 따로 지정할 수 있습니다. 역할별 값이 있으면 우선 사용하고, 없으면 위 공통 `LLM_*`/`INTERNAL_LLM_*`/`ALIBABA_*` 값을 fallback으로 사용합니다.
+
+```text
+CLASSIFICATION_LLM_ENDPOINT_PROFILE=internal
+CLASSIFICATION_INTERNAL_LLM_MODEL=glm-5.1
+CLASSIFICATION_LLM_PROVIDER_PROFILE=glm
+CLASSIFICATION_LLM_GLM_MAX_TOKENS=2048
+CLASSIFICATION_LLM_GLM_EXTRA_BODY_JSON=
+
+KNOWLEDGE_LLM_ENDPOINT_PROFILE=internal
+KNOWLEDGE_INTERNAL_LLM_MODEL=Qwen3.6-35B-A3B
+KNOWLEDGE_LLM_PROVIDER_PROFILE=qwen
+KNOWLEDGE_LLM_QWEN_DISABLE_THINKING=1
+KNOWLEDGE_LLM_MAX_TOKENS=1200
 ```
 
 Alibaba/DashScope OpenAI-compatible API를 쓰려면 endpoint profile을 바꿉니다.
@@ -58,9 +74,22 @@ LLM_PROVIDER_PROFILE=qwen
 LLM_QWEN_DISABLE_THINKING=0
 ```
 
+Alibaba endpoint에서 역할별 모델만 나누려면 아래처럼 `CLASSIFICATION_ALIBABA_MODEL`, `KNOWLEDGE_ALIBABA_MODEL`을 사용하세요.
+
+```text
+CLASSIFICATION_LLM_ENDPOINT_PROFILE=alibaba
+CLASSIFICATION_ALIBABA_MODEL=glm-5.1
+CLASSIFICATION_LLM_PROVIDER_PROFILE=glm
+
+KNOWLEDGE_LLM_ENDPOINT_PROFILE=alibaba
+KNOWLEDGE_ALIBABA_MODEL=Qwen3.6-35B-A3B
+KNOWLEDGE_LLM_PROVIDER_PROFILE=qwen
+KNOWLEDGE_LLM_QWEN_DISABLE_THINKING=1
+```
+
 사내 endpoint가 OpenAI의 `response_format={"type":"json_object"}` 옵션을 지원하지 않으면 `LLM_USE_JSON_RESPONSE_FORMAT=0`을 유지하세요.
 
-`LLM_PROVIDER_PROFILE=auto`는 모델명에 따라 `qwen`, `glm`, `generic` 프로파일을 자동 선택합니다. 모델명이 사내 별칭이라 자동 인식이 어렵다면 직접 지정하세요.
+`LLM_PROVIDER_PROFILE=auto`는 모델명에 따라 `qwen`, `glm`, `generic` 프로파일을 자동 선택합니다. 역할별 모델명이 사내 별칭이라 자동 인식이 어렵다면 `CLASSIFICATION_LLM_PROVIDER_PROFILE`, `KNOWLEDGE_LLM_PROVIDER_PROFILE`로 직접 지정하세요.
 
 ```text
 LLM_PROVIDER_PROFILE=qwen

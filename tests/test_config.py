@@ -102,6 +102,40 @@ def test_profile_can_be_forced(monkeypatch) -> None:
     assert settings.extra_body == {"chat_template_kwargs": {"enable_thinking": True}}
 
 
+def test_classification_role_can_use_glm_model_while_shared_model_is_qwen(monkeypatch) -> None:
+    _base_env(monkeypatch, "Qwen3.6-35B-A3B")
+    monkeypatch.setenv("CLASSIFICATION_LLM_ENDPOINT_PROFILE", "internal")
+    monkeypatch.setenv("CLASSIFICATION_INTERNAL_LLM_MODEL", "glm-5.1")
+    monkeypatch.setenv("CLASSIFICATION_LLM_PROVIDER_PROFILE", "glm")
+    monkeypatch.setenv("CLASSIFICATION_LLM_GLM_MAX_TOKENS", "4096")
+
+    settings = LLMSettings.from_env(role="classification")
+
+    assert settings.endpoint_profile == "internal"
+    assert settings.model == "glm-5.1"
+    assert settings.provider_profile == "glm"
+    assert settings.max_tokens == 4096
+    assert settings.extra_body is None
+
+
+def test_knowledge_role_can_use_qwen_thinking_disabled_while_shared_model_is_glm(monkeypatch) -> None:
+    _base_env(monkeypatch, "glm-5.1")
+    monkeypatch.setenv("LLM_PROVIDER_PROFILE", "glm")
+    monkeypatch.setenv("KNOWLEDGE_LLM_ENDPOINT_PROFILE", "internal")
+    monkeypatch.setenv("KNOWLEDGE_INTERNAL_LLM_MODEL", "Qwen3.6-35B-A3B")
+    monkeypatch.setenv("KNOWLEDGE_LLM_PROVIDER_PROFILE", "qwen")
+    monkeypatch.setenv("KNOWLEDGE_LLM_QWEN_DISABLE_THINKING", "1")
+    monkeypatch.setenv("KNOWLEDGE_LLM_MAX_TOKENS", "1200")
+
+    settings = LLMSettings.from_env(role="knowledge")
+
+    assert settings.endpoint_profile == "internal"
+    assert settings.model == "Qwen3.6-35B-A3B"
+    assert settings.provider_profile == "qwen"
+    assert settings.max_tokens == 1200
+    assert settings.extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
+
+
 def test_alibaba_endpoint_profile_uses_alibaba_env(monkeypatch) -> None:
     _base_env(monkeypatch, "internal-prod-model")
     monkeypatch.setenv("LLM_ENDPOINT_PROFILE", "alibaba")
