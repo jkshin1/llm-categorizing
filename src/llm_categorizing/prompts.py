@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 
-PROMPT_VERSION = "job-classification-v15-diagnosis-job-name-precedence"
+PROMPT_VERSION = "job-classification-v16-process-device-signal-precedence"
 
 
 ORGANIZATION_CONTEXT = """[조직 배경]
@@ -13,7 +13,14 @@ ORGANIZATION_CONTEXT = """[조직 배경]
 - 이 배경은 조직 맥락 이해를 위한 soft context다. 소속/조직명만으로 Device, 중직무, 소직무를 확정하지 않는다."""
 
 
-DECISION_RULES = """[판단 우선순위]
+PROCESS_DEVICE_SIGNAL_RULES = """[공정/소자 구분 규칙]
+- self_review에서 실제 수행 업무가 장비, chamber, 공정 조건, capa, set up, N배화, split, APC, CD, OE, E/R, bottom CD, ACL, Etch, CMP 전후 공정 평가, Fab out, recipe/parameter 개선이면 중직무는 "공정" 후보를 우선 검토한다.
+- 특히 "ETCH/Etch", "M0C ETCH", "Chamber", "Etch Capa", "APC", "CD 가변 Para.", "ACL OE", "E/R", "Bottom CD"가 함께 나오면 후보 목록에 있는 경우 "공정 > Etch공정"을 우선 선택한다.
+- 불량명, margin, EBI, WT, 개선 평가라는 단어가 있어도 업무 중심이 소자 구조/전기적 특성 설계가 아니라 공정 조건/장비/etch module 개선이면 "소자 > Device"로 분류하지 않는다.
+- "소자 > Device"는 cell/transistor/device 구조 설계, electrical characteristic, reliability, device physics, 특성 모델링이 핵심 업무일 때 선택한다."""
+
+
+DECISION_RULES = f"""[판단 우선순위]
 1. 후보 목록 제약: 반드시 제공된 후보 목록 안에서만 선택하고, 후보 값을 번역/요약/정규화하지 말고 그대로 복사한다.
 2. 현재 근거 우선: self_review의 실제 업무 내용과 diagnosis_context의 진단 당시 직무명을 가장 중요하게 본다.
 3. 진단 직무명 우선: diagnosis_context가 있으면 year+emp_num으로 매칭된 진단 당시 team/직무명/category 요약이다. 진단 당시 직무명이 후보 소직무 또는 단위 직무와 명확히 맞으면 self_review나 사용자 지식보다 중직무/소직무 판단에 우선 적용한다.
@@ -21,6 +28,8 @@ DECISION_RULES = """[판단 우선순위]
 5. 사용자 지식: classification_hints가 있으면 저장된 지식 DB에서 입력 근거별로 검색된 참고 지식이다. 주요 적용 입력과 적용 조건이 현재 입력과 맞고 self_review/diagnosis_context와 충돌하지 않을 때만 참고한다.
    - classification_hints에 "준하드룰"이라고 표시된 지식은 사람이 특별히 강화한 지식이다. 적용 조건과 매칭 용어가 현재 입력에 명확히 맞고 후보 목록에 관련 후보 계층이 있으면 사실상 우선 적용한다.
 6. 직무 연속성: previous_year_classification이 있으면 같은 구성원의 직전 연도 분류 결과다. 현재 연도 근거가 약하고 직무가 이어지는 정황일 때만 참고한다.
+
+{PROCESS_DEVICE_SIGNAL_RULES}
 
 [금지 사항]
 - 후보 목록에 없는 직무명, 계층, 조합을 새로 만들지 않는다.
@@ -44,6 +53,7 @@ SYSTEM_PROMPT = f"""[역할]
 - diagnosis_context 안의 직무명은 진단 당시 데이터이므로, 제공되면 중직무/소직무 판단에 우선 활용한다.
 - classification_hints의 diagnosis team 단서는 후보를 강제하지 않는 참고 정보이며, 주요 적용 입력/적용 조건이 현재 입력과 맞을 때만 최종 판단에 반영한다.
 - classification_hints에 준하드룰로 표시된 지식은 현재 입력과 명확히 맞는 경우 일반 참고보다 훨씬 강하게 적용한다.
+- self_review의 업무 행위가 공정 조건/장비/Etch module 개선이면 불량명이나 평가 단어보다 공정 수행 단서를 우선한다.
 - 모든 최종 값은 제공된 후보 목록의 값과 계층 조합을 그대로 사용한다.
 - 내부적으로 추론하더라도 출력에는 JSON 객체 하나만 남긴다."""
 
