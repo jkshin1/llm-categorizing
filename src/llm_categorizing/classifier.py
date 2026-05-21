@@ -289,14 +289,30 @@ class OpenAICompatibleJobClassifier:
             }
 
         final = self._run_stage2(context_json, candidates)
-        candidate = {
-            "중직무": final.major_job,
-            "소직무": final.sub_job,
-            "Device": final.device,
-            "단위 직무": final.unit_job,
-            "세부 직무1": final.detail_job_1,
-            "세부 직무2": final.detail_job_2,
-        }
+        stage2_recovery_reason = ""
+        recovery_pair, recovery_reason = self._stage2_reason_recovery_pair(
+            final,
+            selected_pair=pair,
+            allowed_pairs=pair_candidates,
+        )
+        if recovery_pair:
+            recovered_candidates = self._final_candidates_for_pair(recovery_pair, knowledge_priority)
+            if len(recovered_candidates) <= self.config.max_candidates_per_prompt:
+                try:
+                    recovered_final = self._run_stage2(context_json, recovered_candidates)
+                    recovered_canonical = self._canonical_from_candidates(
+                        self._candidate_from_final_result(recovered_final),
+                        recovered_candidates,
+                    )
+                except Exception:
+                    recovered_canonical = None
+                if recovered_canonical:
+                    pair = recovery_pair
+                    candidates = recovered_candidates
+                    final = recovered_final
+                    stage2_recovery_reason = recovery_reason
+
+        candidate = self._candidate_from_final_result(final)
         canonical = self._canonical_from_candidates(candidate, candidates)
         if canonical is None:
             return self._review_required_result_with_priorities(
@@ -315,7 +331,7 @@ class OpenAICompatibleJobClassifier:
             "reason": final.reason,
             "needs_review": needs_review,
             "ambiguity_reason": "",
-            "guardrail_reason": "",
+            "guardrail_reason": stage2_recovery_reason,
             "diagnosis_priority_reason": "; ".join(applied_priority_reasons),
             "knowledge_priority_reason": "; ".join(knowledge_priority_reasons),
             "error": "",
@@ -389,6 +405,60 @@ class OpenAICompatibleJobClassifier:
             last_error = "final hierarchy path is not in candidate list"
 
         raise ValueError(f"stage2 validation failed: {last_error}")
+
+    def _stage2_reason_recovery_pair(
+        self,
+        final: FinalClassificationResult,
+        *,
+        selected_pair: dict[str, str],
+        allowed_pairs: list[dict[str, str]],
+    ) -> tuple[dict[str, str] | None, str]:
+        if len(allowed_pairs) <= 1:
+            return None, ""
+
+        reason = normalize_cell(final.reason)
+        if not reason:
+            return None, ""
+
+        selected_key = self._pair_key(selected_pair)
+        matches: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for pair in allowed_pairs:
+            key = self._pair_key(pair)
+            if key == selected_key or key in seen:
+                continue
+            if _reason_mentions_pair_path(reason, pair):
+                seen.add(key)
+                matches.append(dict(pair))
+
+        if len(matches) != 1:
+            return None, ""
+
+        recovered_pair = matches[0]
+        return (
+            recovered_pair,
+            "stage2 reason이 선택된 후보 밖의 사용 가능 pair "
+            f"'{recovered_pair['중직무']} > {recovered_pair['소직무']}'를 명시해 stage2 재시도",
+        )
+
+    def _candidate_from_final_result(
+        self,
+        final: FinalClassificationResult,
+    ) -> dict[str, str]:
+        return {
+            "중직무": final.major_job,
+            "소직무": final.sub_job,
+            "Device": final.device,
+            "단위 직무": final.unit_job,
+            "세부 직무1": final.detail_job_1,
+            "세부 직무2": final.detail_job_2,
+        }
+
+    def _pair_key(self, pair: dict[str, str]) -> tuple[str, str]:
+        return (
+            normalize_cell(pair.get("중직무", "")).casefold(),
+            normalize_cell(pair.get("소직무", "")).casefold(),
+        )
 
     def _canonical_from_candidates(
         self,
@@ -933,6 +1003,7 @@ class OpenAICompatibleJobClassifier:
             "confidence_review_threshold": self.config.confidence_review_threshold,
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
             "near_hard_knowledge_policy": "diagnosis_job_name_precedence_v2",
+            "stage2_pair_recovery_policy": "exact_path_reason_v1",
             "knowledge_review_scope": self.config.knowledge_review_scope,
             "prompt_version": PROMPT_VERSION,
         }
@@ -973,6 +1044,17 @@ class OpenAICompatibleJobClassifier:
 
 def _compact_text(value: object) -> str:
     return re.sub(r"[\W_]+", "", normalize_cell(value).casefold())
+
+
+def _reason_mentions_pair_path(reason: str, pair: dict[str, str]) -> bool:
+    major_job = normalize_cell(pair.get("중직무", ""))
+    sub_job = normalize_cell(pair.get("소직무", ""))
+    if not major_job or not sub_job:
+        return False
+
+    compact_reason = re.sub(r"\s+", "", normalize_cell(reason).casefold())
+    compact_path = re.sub(r"\s+", "", f"{major_job}>{sub_job}".casefold())
+    return compact_path in compact_reason
 
 
 def _text_match_score(target: object, source: object) -> int:

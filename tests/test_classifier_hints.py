@@ -1,7 +1,10 @@
+from types import MethodType
+
 from llm_categorizing.classifier import ClassificationConfig, OpenAICompatibleJobClassifier, extract_json_object
 from llm_categorizing.config import LLMSettings
 from llm_categorizing.diagnosis import DiagnosisContext
 from llm_categorizing.knowledge import JobKnowledgeStore, KnowledgeDraft
+from llm_categorizing.models import FinalClassificationResult, Stage1Result
 from llm_categorizing.taxonomy import Taxonomy
 
 
@@ -163,6 +166,89 @@ def test_near_hard_knowledge_limits_taxonomy_candidates(tmp_path) -> None:
     assert "준하드룰" in reason
     assert len(final_candidates) == 1
     assert final_candidates[0]["Device"] == "NAND"
+
+
+def test_stage2_reason_can_recover_available_pair_after_stage1_mispick() -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "공정",
+                "소직무": "Etch공정",
+                "Device": "DRAM",
+                "단위 직무": "Chamber",
+                "세부 직무1": "Etch",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "소자",
+                "소직무": "Device",
+                "Device": "NAND",
+                "단위 직무": "소자개발",
+                "세부 직무1": "Device",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    classifier = _classifier(taxonomy)
+
+    def wrong_stage1(self, context_json, candidate_pairs=None):
+        return Stage1Result(
+            major_job="소자",
+            sub_job="Device",
+            confidence=0.8,
+            needs_review=False,
+            reason="잘못된 stage1 선택",
+        )
+
+    stage2_major_jobs: list[str] = []
+
+    def recovering_stage2(self, context_json, candidates):
+        stage2_major_jobs.append(candidates[0]["중직무"])
+        if candidates[0]["중직무"] == "소자":
+            return FinalClassificationResult(
+                major_job="소자",
+                sub_job="Device",
+                device="NAND",
+                unit_job="소자개발",
+                detail_job_1="Device",
+                detail_job_2="",
+                confidence=0.35,
+                needs_review=True,
+                reason=(
+                    "self_review의 핵심 업무는 M0C ETCH 공정 조건/장비/Capa/APC 개선이므로 "
+                    "'공정 > Etch공정'이 맞으나 제공된 후보 목록에 없어 NAND Device 후보를 선택함."
+                ),
+            )
+        return FinalClassificationResult(
+            major_job="공정",
+            sub_job="Etch공정",
+            device="DRAM",
+            unit_job="Chamber",
+            detail_job_1="Etch",
+            detail_job_2="",
+            confidence=0.91,
+            needs_review=False,
+            reason="공정 > Etch공정 후보로 재검토해 Etch 공정 업무로 분류",
+        )
+
+    classifier._run_stage1 = MethodType(wrong_stage1, classifier)
+    classifier._run_stage2 = MethodType(recovering_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2022",
+            "team": "",
+            "emp_num": "E0001",
+            "name": "홍길동",
+            "self_review": "M0C ETCH Set Up, Chamber Capa, APC CD 개선",
+        }
+    )
+
+    assert stage2_major_jobs == ["소자", "공정"]
+    assert result["중직무"] == "공정"
+    assert result["소직무"] == "Etch공정"
+    assert result["needs_review"] is False
+    assert "stage2 재시도" in result["guardrail_reason"]
 
 
 def test_classifier_applies_global_hint_cap(tmp_path) -> None:
