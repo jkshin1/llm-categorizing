@@ -254,7 +254,7 @@ python serve_knowledge.py --allow-fallback-normalizer
 ```text
 year,team,emp_num,name,
 중직무,소직무,Device,단위 직무,세부 직무1,세부 직무2,
-confidence,reason,needs_review,ambiguity_reason,guardrail_reason,diagnosis_priority_reason,
+confidence,reason,needs_review,ambiguity_reason,guardrail_reason,diagnosis_priority_reason,knowledge_priority_reason,
 previous_year,previous_year_job_path,previous_year_confidence,previous_year_needs_review,
 used_knowledge_ids,used_knowledge_types,used_knowledge_scores,
 used_knowledge_review_statuses,used_knowledge_enforcement_levels,
@@ -290,7 +290,7 @@ error,input_truncated,taxonomy_version,model_name,classified_at
 - diagnosis의 `team`은 후보 제한 rule로 쓰지 않고, 직접 보이는 taxonomy 중직무 표현과 지식 DB에 저장된 alias/제품 지식을 LLM 판단 근거로 전달합니다. `TD` 같은 2글자 alias도 team에서 독립 token으로 매칭되면 지식 검색에 사용합니다.
 - 직전 연도 결과는 같은 `emp_num`의 `year-1` 결과가 있고 오류가 없으며 `needs_review=False`, confidence가 검토 threshold 이상일 때만 사용합니다. 현재 연도 self_review/diagnosis와 충돌하면 현재 연도 근거를 우선하도록 prompt에 명시합니다.
 - 사용자가 지식 입력 페이지로 추가한 지식은 `self_review`, diagnosis `team`, 진단 직무명, category를 분리해서 검색한 뒤 점수가 높은 일부만 `classification_hints`에 넣습니다. target taxonomy 값만으로 지식을 검색하지 않고 alias 매칭이 있을 때 target/본문 overlap을 boost로만 사용합니다. diagnosis `항목` 값은 지식 검색에도 사용하지 않습니다. 결과 CSV의 `used_knowledge_ids`, `used_knowledge_types`, `used_knowledge_scores`, `used_knowledge_enforcement_levels`, `used_knowledge_match_fields`, `knowledge_version`으로 어떤 지식이 쓰였는지 추적할 수 있습니다.
-- 지식 DB에는 `knowledge_type`, `review_status`, `enforcement_level`, `match_fields`, `conflicts`를 저장합니다. `승격`은 `strong`, `준하드룰`은 `near_hard`로 저장됩니다. `near_hard` 지식은 검색 점수와 프롬프트에서 가장 강하게 전달되며, 적용 조건과 매칭 용어가 현재 입력에 명확히 맞으면 LLM이 사실상 우선 적용하도록 안내합니다. 다만 taxonomy 후보 목록 밖 값을 만들지는 않습니다.
+- 지식 DB에는 `knowledge_type`, `review_status`, `enforcement_level`, `match_fields`, `conflicts`를 저장합니다. `승격`은 `strong`, `준하드룰`은 `near_hard`로 저장됩니다. `near_hard` 지식은 현재 입력에 매칭되면 해당 target과 맞는 taxonomy row로 stage1/stage2 후보를 먼저 제한합니다. 최종 후보가 1개로 좁혀지면 LLM 호출 없이 해당 row를 선택하며, 적용 여부는 `knowledge_priority_reason`에 기록합니다.
 - 같은 raw 지식이 다시 들어오면 새 row를 만들지 않고 기존 row에 alias/source/priority를 병합합니다. 같은 alias가 서로 다른 target을 가리키면 `conflicts`와 검증 경고로 표시해 사람이 확인할 수 있게 합니다.
 - 분류 시 검색된 지식은 `knowledge_usage` 테이블에 `classification_id`, `knowledge_id`, `match_score`, 최종 분류 결과와 함께 기록되어 나중에 어떤 지식이 실제 분류에 자주 쓰였는지 점검할 수 있습니다.
 - taxonomy 중복 단위직무를 후보에 별도 주의 정보로 주입하던 로직도 분류 판단에서는 제거했습니다. `ambiguity_reason` 컬럼은 과거 출력 스키마 호환을 위해 남아 있지만 새 분류에서는 빈 값입니다.

@@ -13,7 +13,12 @@ from tenacity import Retrying, retry_if_exception_type, stop_after_attempt, wait
 
 from llm_categorizing.config import LLMSettings
 from llm_categorizing.diagnosis import DiagnosisContext, empty_diagnosis_output_payload
-from llm_categorizing.knowledge import JobKnowledge, JobKnowledgeStore, KnowledgeSearchContext
+from llm_categorizing.knowledge import (
+    JobKnowledge,
+    JobKnowledgeStore,
+    KnowledgeSearchContext,
+    taxonomy_target_from_knowledge,
+)
 from llm_categorizing.models import FinalClassificationResult, Stage1Result
 from llm_categorizing.prompts import (
     PROMPT_VERSION,
@@ -70,6 +75,12 @@ class DiagnosisPriority:
     major_job: str = ""
     sub_job: str = ""
     reason: str = ""
+
+
+@dataclass(frozen=True)
+class KnowledgeHardPriority:
+    rows: tuple[dict[str, str], ...] = ()
+    reasons: tuple[str, ...] = ()
 
 
 class JsonlCache:
@@ -182,7 +193,7 @@ class OpenAICompatibleJobClassifier:
                 return result
 
         try:
-            result = self._classify_uncached(context_json, diagnosis_priority)
+            result = self._classify_uncached(context_json, diagnosis_priority, knowledge_items)
         except Exception as exc:
             result = self._review_required_result(f"classification_error: {exc}")
 
@@ -204,6 +215,7 @@ class OpenAICompatibleJobClassifier:
         result["knowledge_version"] = self._knowledge_version()
         result["knowledge_review_scope"] = self.config.knowledge_review_scope
         result.setdefault("diagnosis_priority_reason", "")
+        result.setdefault("knowledge_priority_reason", "")
         result.update(self._previous_year_output_payload(previous_year_payload))
         result["input_truncated"] = truncated
         result["taxonomy_version"] = self.taxonomy.version_hash()
@@ -224,11 +236,19 @@ class OpenAICompatibleJobClassifier:
         self,
         context_json: str,
         diagnosis_priority: DiagnosisPriority,
+        knowledge_items: list[JobKnowledge],
     ) -> dict[str, Any]:
         applied_priority_reasons: list[str] = []
-        pair_candidates, pair_priority_reason = self._diagnosis_pair_candidates(diagnosis_priority)
-        if pair_priority_reason:
-            applied_priority_reasons.append(pair_priority_reason)
+        knowledge_priority = self._near_hard_knowledge_priority(knowledge_items)
+        knowledge_priority_reasons = list(knowledge_priority.reasons)
+        if knowledge_priority.rows:
+            pair_candidates, pair_priority_reason = self._knowledge_pair_candidates(knowledge_priority)
+            if pair_priority_reason:
+                knowledge_priority_reasons.append(pair_priority_reason)
+        else:
+            pair_candidates, pair_priority_reason = self._diagnosis_pair_candidates(diagnosis_priority)
+            if pair_priority_reason:
+                applied_priority_reasons.append(pair_priority_reason)
 
         if len(pair_candidates) == 1:
             pair = pair_candidates[0]
@@ -236,17 +256,33 @@ class OpenAICompatibleJobClassifier:
             stage1 = self._run_stage1(context_json, pair_candidates)
             pair = self.taxonomy.canonical_pair(stage1.major_job, stage1.sub_job)
             if pair is None:
-                return self._review_required_result_with_diagnosis_priority(
+                return self._review_required_result_with_priorities(
                     "stage1 result is not in taxonomy",
                     applied_priority_reasons,
+                    knowledge_priority_reasons,
                 )
 
-        candidates = self.taxonomy.children_for_pair(pair["중직무"], pair["소직무"])
+        candidates = self._final_candidates_for_pair(pair, knowledge_priority)
         if len(candidates) > self.config.max_candidates_per_prompt:
-            return self._review_required_result_with_diagnosis_priority(
+            return self._review_required_result_with_priorities(
                 f"too many final candidates under selected pair: {len(candidates)}",
                 applied_priority_reasons,
+                knowledge_priority_reasons,
             )
+
+        if knowledge_priority.rows and len(candidates) == 1:
+            canonical = dict(candidates[0])
+            return {
+                **canonical,
+                "confidence": 0.95,
+                "reason": "준하드룰 지식이 현재 입력과 매칭되어 단일 taxonomy 후보로 제한됨.",
+                "needs_review": False,
+                "ambiguity_reason": "",
+                "guardrail_reason": "",
+                "diagnosis_priority_reason": "; ".join(applied_priority_reasons),
+                "knowledge_priority_reason": "; ".join(knowledge_priority_reasons),
+                "error": "",
+            }
 
         final = self._run_stage2(context_json, candidates)
         candidate = {
@@ -259,9 +295,10 @@ class OpenAICompatibleJobClassifier:
         }
         canonical = self._canonical_from_candidates(candidate, candidates)
         if canonical is None:
-            return self._review_required_result_with_diagnosis_priority(
+            return self._review_required_result_with_priorities(
                 "final result is not in taxonomy",
                 applied_priority_reasons,
+                knowledge_priority_reasons,
             )
 
         needs_review = (
@@ -276,6 +313,7 @@ class OpenAICompatibleJobClassifier:
             "ambiguity_reason": "",
             "guardrail_reason": "",
             "diagnosis_priority_reason": "; ".join(applied_priority_reasons),
+            "knowledge_priority_reason": "; ".join(knowledge_priority_reasons),
             "error": "",
         }
 
@@ -378,6 +416,90 @@ class OpenAICompatibleJobClassifier:
             ):
                 return dict(pair)
         return None
+
+    def _near_hard_knowledge_priority(
+        self,
+        knowledge_items: list[JobKnowledge],
+    ) -> KnowledgeHardPriority:
+        rows: list[dict[str, str]] = []
+        reasons: list[str] = []
+        seen_rows: set[tuple[str, ...]] = set()
+        for item in knowledge_items:
+            if item.enforcement_level != "near_hard":
+                continue
+            if item.review_status != "approved" or item.conflicts:
+                continue
+            target = {
+                column: normalize_cell(value)
+                for column, value in taxonomy_target_from_knowledge(item).items()
+                if normalize_cell(value)
+            }
+            if not target:
+                continue
+            matched_rows = self._taxonomy_rows_matching(target)
+            if not matched_rows:
+                continue
+            for row in matched_rows:
+                key = tuple(normalize_cell(row.get(column, "")).casefold() for column in TAXONOMY_COLUMNS)
+                if key in seen_rows:
+                    continue
+                seen_rows.add(key)
+                rows.append(row)
+            reasons.append(
+                f"준하드룰 지식[{item.id}] '{item.title}' target 기준 후보 제한"
+            )
+        return KnowledgeHardPriority(rows=tuple(rows), reasons=tuple(reasons))
+
+    def _taxonomy_rows_matching(self, specified: dict[str, str]) -> list[dict[str, str]]:
+        rows: list[dict[str, str]] = []
+        for row in self.taxonomy.rows:
+            if all(
+                normalize_cell(row.get(column, "")).casefold() == normalize_cell(value).casefold()
+                for column, value in specified.items()
+            ):
+                rows.append(dict(row))
+        return rows
+
+    def _knowledge_pair_candidates(
+        self,
+        knowledge_priority: KnowledgeHardPriority,
+    ) -> tuple[list[dict[str, str]], str]:
+        pairs: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for row in knowledge_priority.rows:
+            key = (
+                normalize_cell(row.get("중직무", "")).casefold(),
+                normalize_cell(row.get("소직무", "")).casefold(),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            pairs.append({"중직무": row["중직무"], "소직무": row["소직무"]})
+        reason = "준하드룰 지식 우선 적용: stage1 후보를 매칭 taxonomy row의 중직무/소직무로 제한"
+        return pairs or self.taxonomy.pairs(), reason if pairs else ""
+
+    def _final_candidates_for_pair(
+        self,
+        pair: dict[str, str],
+        knowledge_priority: KnowledgeHardPriority,
+    ) -> list[dict[str, str]]:
+        candidates = self.taxonomy.children_for_pair(pair["중직무"], pair["소직무"])
+        if not knowledge_priority.rows:
+            return candidates
+        pair_key = (
+            normalize_cell(pair.get("중직무", "")).casefold(),
+            normalize_cell(pair.get("소직무", "")).casefold(),
+        )
+        filtered = [
+            row
+            for row in knowledge_priority.rows
+            if (
+                normalize_cell(row.get("중직무", "")).casefold(),
+                normalize_cell(row.get("소직무", "")).casefold(),
+            )
+            == pair_key
+        ]
+        return filtered or candidates
 
     def _diagnosis_priority(
         self,
@@ -762,6 +884,7 @@ class OpenAICompatibleJobClassifier:
             "include_team": self.config.include_team_in_prompt,
             "confidence_review_threshold": self.config.confidence_review_threshold,
             "diagnosis_hard_match_policy": "exact_or_compact_exact_v1",
+            "near_hard_knowledge_policy": "candidate_filter_v1",
             "knowledge_review_scope": self.config.knowledge_review_scope,
             "prompt_version": PROMPT_VERSION,
         }
@@ -780,6 +903,7 @@ class OpenAICompatibleJobClassifier:
             "ambiguity_reason": "",
             "guardrail_reason": "",
             "diagnosis_priority_reason": "",
+            "knowledge_priority_reason": "",
             "previous_year": "",
             "previous_year_job_path": "",
             "previous_year_confidence": "",
@@ -787,13 +911,15 @@ class OpenAICompatibleJobClassifier:
             "error": reason,
         }
 
-    def _review_required_result_with_diagnosis_priority(
+    def _review_required_result_with_priorities(
         self,
         reason: str,
         applied_priority_reasons: list[str],
+        knowledge_priority_reasons: list[str],
     ) -> dict[str, Any]:
         result = self._review_required_result(reason)
         result["diagnosis_priority_reason"] = "; ".join(applied_priority_reasons)
+        result["knowledge_priority_reason"] = "; ".join(knowledge_priority_reasons)
         return result
 
 

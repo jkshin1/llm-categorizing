@@ -9,7 +9,7 @@ from llm_categorizing.prompts import (
 
 
 def test_system_prompt_includes_future_technology_research_context() -> None:
-    assert PROMPT_VERSION == "job-classification-v13-quality-guards"
+    assert PROMPT_VERSION == "job-classification-v14-near-hard-candidate-filter"
     assert "SK하이닉스 미래기술연구원" in SYSTEM_PROMPT
     assert "DRAM/NAND Flash 혁신" in ORGANIZATION_CONTEXT
     assert "DRAM/NAND 선행 제품 개발" in ORGANIZATION_CONTEXT

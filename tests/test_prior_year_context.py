@@ -105,7 +105,7 @@ def test_classifier_includes_previous_year_classification_in_prompt_and_output()
     classifier = _classifier(_taxonomy())
     captured: dict[str, object] = {}
 
-    def fixed_uncached(self, context_json, diagnosis_priority):
+    def fixed_uncached(self, context_json, diagnosis_priority, knowledge_items):
         captured["context"] = json.loads(context_json)
         return {
             "중직무": "공정",
@@ -120,6 +120,7 @@ def test_classifier_includes_previous_year_classification_in_prompt_and_output()
             "ambiguity_reason": "",
             "guardrail_reason": "",
             "diagnosis_priority_reason": "",
+            "knowledge_priority_reason": "",
             "error": "",
         }
 

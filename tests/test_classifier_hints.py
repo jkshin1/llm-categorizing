@@ -111,6 +111,60 @@ def test_classifier_uses_only_retrieved_user_knowledge_as_hints(tmp_path) -> Non
     assert "AlphaTask 참고 지식" in hints[0]
 
 
+def test_near_hard_knowledge_limits_taxonomy_candidates(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "A",
+                "소직무": "A1",
+                "Device": "DRAM",
+                "단위 직무": "Alpha",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "B",
+                "소직무": "B1",
+                "Device": "NAND",
+                "단위 직무": "Beta",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "B",
+                "소직무": "B1",
+                "Device": "DRAM",
+                "단위 직무": "Gamma",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "HardAlias는 NAND 후보를 강제한다.",
+        KnowledgeDraft(
+            title="HardAlias 준하드룰",
+            aliases=["HardAlias"],
+            hint="HardAlias가 있으면 NAND 후보를 우선한다.",
+            target_device="NAND",
+        ),
+    )
+    store.update_metadata(entry.id, enforcement_level="near_hard")
+    classifier = _classifier(taxonomy, store)
+
+    knowledge_items = classifier._retrieve_knowledge("self_review는 DRAM 업무지만 HardAlias 포함", None)
+    priority = classifier._near_hard_knowledge_priority(knowledge_items)
+    pairs, reason = classifier._knowledge_pair_candidates(priority)
+    final_candidates = classifier._final_candidates_for_pair(pairs[0], priority)
+
+    assert len(pairs) == 1
+    assert pairs == [{"중직무": "B", "소직무": "B1"}]
+    assert "준하드룰" in reason
+    assert len(final_candidates) == 1
+    assert final_candidates[0]["Device"] == "NAND"
+
+
 def test_classifier_applies_global_hint_cap(tmp_path) -> None:
     taxonomy = Taxonomy.from_rows(
         [

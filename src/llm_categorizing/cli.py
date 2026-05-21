@@ -223,6 +223,7 @@ def build_output_row(
             "ambiguity_reason": result.get("ambiguity_reason", ""),
             "guardrail_reason": result.get("guardrail_reason", ""),
             "diagnosis_priority_reason": result.get("diagnosis_priority_reason", ""),
+            "knowledge_priority_reason": result.get("knowledge_priority_reason", ""),
             "previous_year": result.get("previous_year", ""),
             "previous_year_job_path": result.get("previous_year_job_path", ""),
             "previous_year_confidence": result.get("previous_year_confidence", ""),
