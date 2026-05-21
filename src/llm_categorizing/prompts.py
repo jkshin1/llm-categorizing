@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 
-PROMPT_VERSION = "job-classification-v11-sk-hynix-ftr-context"
+PROMPT_VERSION = "job-classification-v12-near-hard-knowledge"
 
 
 ORGANIZATION_CONTEXT = """[조직 배경]
@@ -19,6 +19,7 @@ DECISION_RULES = """[판단 우선순위]
 3. 진단 직무명 우선: diagnosis_context가 있으면 year+emp_num으로 매칭된 진단 당시 team/직무명/category 요약이다. 진단 당시 직무명은 중직무/소직무 판단의 우선 근거로 사용한다.
 4. 조직/alias 해석: diagnosis_context의 team에는 사내 조직명, 프로젝트명, 제품 alias가 들어갈 수 있다. 조직 배경과 classification_hints를 참고하되 후보를 강제하는 rule로 쓰지 않는다.
 5. 사용자 지식: classification_hints가 있으면 저장된 지식 DB에서 입력 근거별로 검색된 참고 지식이다. 주요 적용 입력과 적용 조건이 현재 입력과 맞고 self_review/diagnosis_context와 충돌하지 않을 때만 참고한다.
+   - classification_hints에 "준하드룰"이라고 표시된 지식은 사람이 특별히 강화한 지식이다. 적용 조건과 매칭 용어가 현재 입력에 명확히 맞고 후보 목록에 관련 후보 계층이 있으면 사실상 우선 적용한다.
 6. 직무 연속성: previous_year_classification이 있으면 같은 구성원의 직전 연도 분류 결과다. 현재 연도 근거가 약하고 직무가 이어지는 정황일 때만 참고한다.
 
 [금지 사항]
@@ -42,6 +43,7 @@ SYSTEM_PROMPT = f"""[역할]
 - team은 설정에 따라 제공되지 않을 수 있으며, 제공되더라도 self_review의 실제 업무 내용을 우선한다.
 - diagnosis_context 안의 직무명은 진단 당시 데이터이므로, 제공되면 중직무/소직무 판단에 우선 활용한다.
 - classification_hints의 diagnosis team 단서는 후보를 강제하지 않는 참고 정보이며, 주요 적용 입력/적용 조건이 현재 입력과 맞을 때만 최종 판단에 반영한다.
+- classification_hints에 준하드룰로 표시된 지식은 현재 입력과 명확히 맞는 경우 일반 참고보다 훨씬 강하게 적용한다.
 - 모든 최종 값은 제공된 후보 목록의 값과 계층 조합을 그대로 사용한다.
 - 내부적으로 추론하더라도 출력에는 JSON 객체 하나만 남긴다."""
 

@@ -9,12 +9,13 @@ from llm_categorizing.prompts import (
 
 
 def test_system_prompt_includes_future_technology_research_context() -> None:
-    assert PROMPT_VERSION == "job-classification-v11-sk-hynix-ftr-context"
+    assert PROMPT_VERSION == "job-classification-v12-near-hard-knowledge"
     assert "SK하이닉스 미래기술연구원" in SYSTEM_PROMPT
     assert "DRAM/NAND Flash 혁신" in ORGANIZATION_CONTEXT
     assert "DRAM/NAND 선행 제품 개발" in ORGANIZATION_CONTEXT
     assert "soft context" in ORGANIZATION_CONTEXT
     assert "조직명만으로 Device, 중직무, 소직무를 확정하지 않는다" in ORGANIZATION_CONTEXT
+    assert "준하드룰" in SYSTEM_PROMPT
 
 
 def test_stage_prompts_use_stable_json_boundaries_and_output_rules() -> None:

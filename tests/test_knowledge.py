@@ -163,6 +163,62 @@ def test_knowledge_store_can_retrieve_only_approved_entries(tmp_path) -> None:
     assert [item.id for item in approved_only] == [approved.id]
 
 
+def test_near_hard_enforcement_is_strongest_hint(tmp_path) -> None:
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    normal = store.add(
+        "AlphaTask는 일반 참고 지식이다.",
+        KnowledgeDraft(
+            title="AlphaTask 일반",
+            aliases=["AlphaTask"],
+            hint="AlphaTask는 일반 참고로만 본다.",
+            target_major_job="A",
+            priority=90,
+            confidence=0.9,
+        ),
+    )
+    near_hard = store.add(
+        "AlphaTask는 검증된 준하드룰 지식이다.",
+        KnowledgeDraft(
+            title="AlphaTask 준하드",
+            aliases=["AlphaTask"],
+            hint="AlphaTask가 있으면 B 후보를 사실상 우선한다.",
+            target_major_job="B",
+            priority=50,
+            confidence=0.5,
+        ),
+    )
+
+    updated = store.update_metadata(near_hard.id, enforcement_level="near_hard")
+    retrieved = store.retrieve("AlphaTask 수행", limit=2)
+
+    assert updated is not None
+    assert updated.enforcement_level == "near_hard"
+    assert updated.knowledge_type == "verified_rule"
+    assert updated.review_status == "approved"
+    assert "준하드룰" in updated.prompt_hint()
+    assert [item.id for item in retrieved] == [near_hard.id, normal.id]
+
+
+def test_strong_enforcement_preserves_approved_status(tmp_path) -> None:
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "BetaTask는 검증 지식이다.",
+        KnowledgeDraft(aliases=["BetaTask"], hint="BetaTask는 검증 지식"),
+    )
+
+    strong = store.update_metadata(entry.id, enforcement_level="strong")
+    soft = store.update_metadata(entry.id, enforcement_level="soft")
+
+    assert strong is not None
+    assert strong.enforcement_level == "strong"
+    assert strong.knowledge_type == "verified_rule"
+    assert strong.review_status == "approved"
+    assert soft is not None
+    assert soft.enforcement_level == "soft"
+    assert soft.knowledge_type == "soft_hint"
+    assert soft.review_status == "draft"
+
+
 def test_knowledge_normalizer_forces_qwen_thinking_off() -> None:
     settings = LLMSettings(
         base_url="http://localhost:1/v1",

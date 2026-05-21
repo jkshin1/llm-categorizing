@@ -27,6 +27,7 @@ SUPPORTED_KNOWLEDGE_TYPES = {
 }
 SUPPORTED_REVIEW_STATUSES = {"draft", "approved", "rejected"}
 SUPPORTED_RETRIEVAL_SCOPES = {"usable", "approved"}
+SUPPORTED_ENFORCEMENT_LEVELS = {"soft", "strong", "near_hard"}
 SUPPORTED_MATCH_FIELDS = {
     "self_review",
     "diagnosis_team",
@@ -298,6 +299,7 @@ class JobKnowledge:
     confidence: float
     active: bool
     review_status: str
+    enforcement_level: str
     validation_errors: tuple[str, ...]
     conflicts: tuple[dict[str, Any], ...]
     source: str
@@ -319,6 +321,9 @@ class JobKnowledge:
         conflicts = json.loads(row["conflicts_json"] or "[]")
         if not isinstance(conflicts, list):
             conflicts = []
+        enforcement_level = normalize_cell(row["enforcement_level"]).casefold()
+        if enforcement_level not in SUPPORTED_ENFORCEMENT_LEVELS:
+            enforcement_level = "soft"
         return cls(
             id=row["id"],
             raw_text=row["raw_text"],
@@ -342,6 +347,7 @@ class JobKnowledge:
             confidence=float(row["confidence"]),
             active=bool(row["active"]),
             review_status=row["review_status"],
+            enforcement_level=enforcement_level,
             validation_errors=tuple(
                 normalize_cell(item) for item in validation_errors if normalize_cell(item)
             ),
@@ -360,7 +366,13 @@ class JobKnowledge:
             "correction": "수정 사례",
             "verified_rule": "검증 지식",
         }.get(self.knowledge_type, "판단 참고")
-        if self.conflicts and self.review_status != "approved":
+        if self.enforcement_level == "near_hard":
+            strength = (
+                "준하드룰. 적용 조건과 매칭 용어가 현재 입력에서 명확히 맞고 "
+                "후보 목록에 관련 후보 계층이 있으면 사실상 우선 적용하라. "
+                "현재 self_review 또는 diagnosis_context에 명시적인 반대 근거가 있을 때만 낮춰 참고한다."
+            )
+        elif self.conflicts and self.review_status != "approved":
             strength = "충돌 가능성이 표시된 지식이므로 현재 입력과 명확히 맞을 때만 약하게 참고."
         elif self.knowledge_type == "verified_rule" or self.review_status == "approved":
             strength = "사람이 검증한 지식이므로 self_review와 충돌하지 않으면 강하게 참고."
@@ -409,6 +421,7 @@ class JobKnowledge:
             "confidence": self.confidence,
             "active": self.active,
             "review_status": self.review_status,
+            "enforcement_level": self.enforcement_level,
             "validation_errors": list(self.validation_errors),
             "conflicts": list(self.conflicts),
             "source": self.source,
@@ -500,6 +513,7 @@ class JobKnowledgeStore:
                     confidence REAL NOT NULL,
                     active INTEGER NOT NULL,
                     review_status TEXT NOT NULL DEFAULT 'draft',
+                    enforcement_level TEXT NOT NULL DEFAULT 'soft',
                     validation_errors_json TEXT NOT NULL DEFAULT '[]',
                     conflicts_json TEXT NOT NULL DEFAULT '[]',
                     source TEXT NOT NULL,
@@ -537,6 +551,12 @@ class JobKnowledgeStore:
                 "knowledge_entries",
                 "review_status",
                 "TEXT NOT NULL DEFAULT 'draft'",
+            )
+            self._ensure_column(
+                connection,
+                "knowledge_entries",
+                "enforcement_level",
+                "TEXT NOT NULL DEFAULT 'soft'",
             )
             self._ensure_column(
                 connection,
@@ -605,6 +625,7 @@ class JobKnowledgeStore:
         now = _utc_now()
         entry_id = uuid.uuid4().hex[:16]
         review_status = "approved" if clean_draft.knowledge_type == "verified_rule" and not conflicts else "draft"
+        enforcement_level = "strong" if review_status == "approved" else "soft"
         values = {
             "id": entry_id,
             "raw_text": clean_raw_text,
@@ -624,6 +645,7 @@ class JobKnowledgeStore:
             "confidence": clean_draft.confidence,
             "active": 1,
             "review_status": review_status,
+            "enforcement_level": enforcement_level,
             "validation_errors_json": json.dumps(clean_draft.validation_errors, ensure_ascii=False),
             "conflicts_json": json.dumps(conflicts, ensure_ascii=False),
             "source": source,
@@ -648,14 +670,14 @@ class JobKnowledgeStore:
                     applies_when, hint,
                     target_major_job, target_sub_job, target_device, target_unit_job,
                     target_detail_job_1, target_detail_job_2, priority, confidence,
-                    active, review_status, validation_errors_json, conflicts_json,
+                    active, review_status, enforcement_level, validation_errors_json, conflicts_json,
                     source, created_at, updated_at
                 ) VALUES (
                     :id, :raw_text, :knowledge_type, :title, :aliases_json, :match_fields_json,
                     :applies_when, :hint,
                     :target_major_job, :target_sub_job, :target_device, :target_unit_job,
                     :target_detail_job_1, :target_detail_job_2, :priority, :confidence,
-                    :active, :review_status, :validation_errors_json, :conflicts_json,
+                    :active, :review_status, :enforcement_level, :validation_errors_json, :conflicts_json,
                     :source, :created_at, :updated_at
                 )
                 """,
@@ -779,6 +801,12 @@ class JobKnowledgeStore:
             review_status = "draft"
         elif knowledge_type == "verified_rule" and not merged_conflicts:
             review_status = "approved"
+        enforcement_level = stronger_enforcement_level(
+            existing.enforcement_level,
+            "strong" if review_status == "approved" else "soft",
+        )
+        if merged_conflicts and review_status != "approved":
+            enforcement_level = "soft"
 
         source_values = merge_text_lists(existing.source.split(","), [source], limit=8)
         values = {
@@ -798,6 +826,7 @@ class JobKnowledgeStore:
             "priority": max(existing.priority, draft.priority),
             "confidence": max(existing.confidence, draft.confidence),
             "review_status": review_status,
+            "enforcement_level": enforcement_level,
             "validation_errors_json": json.dumps(validation_errors, ensure_ascii=False),
             "conflicts_json": json.dumps(merged_conflicts, ensure_ascii=False),
             "source": ",".join(source_values),
@@ -821,6 +850,7 @@ class JobKnowledgeStore:
                 priority = :priority,
                 confidence = :confidence,
                 review_status = :review_status,
+                enforcement_level = :enforcement_level,
                 validation_errors_json = :validation_errors_json,
                 conflicts_json = :conflicts_json,
                 source = :source,
@@ -872,17 +902,36 @@ class JobKnowledgeStore:
         *,
         knowledge_type: str | None = None,
         review_status: str | None = None,
+        enforcement_level: str | None = None,
         clear_conflicts: bool = False,
     ) -> JobKnowledge | None:
         clean_type = normalize_cell(knowledge_type).casefold() if knowledge_type is not None else None
         clean_status = normalize_cell(review_status).casefold() if review_status is not None else None
+        clean_enforcement = (
+            normalize_cell(enforcement_level).casefold() if enforcement_level is not None else None
+        )
         if clean_type is not None and clean_type not in SUPPORTED_KNOWLEDGE_TYPES:
             raise ValueError(f"knowledge_type must be one of: {', '.join(sorted(SUPPORTED_KNOWLEDGE_TYPES))}")
         if clean_status is not None and clean_status not in SUPPORTED_REVIEW_STATUSES:
             raise ValueError(f"review_status must be one of: {', '.join(sorted(SUPPORTED_REVIEW_STATUSES))}")
+        if clean_enforcement is not None and clean_enforcement not in SUPPORTED_ENFORCEMENT_LEVELS:
+            raise ValueError(
+                f"enforcement_level must be one of: {', '.join(sorted(SUPPORTED_ENFORCEMENT_LEVELS))}"
+            )
 
         assignments: list[str] = []
         values: list[object] = []
+        if clean_enforcement == "near_hard":
+            clean_type = "verified_rule"
+            clean_status = "approved"
+            clear_conflicts = True
+        elif clean_enforcement == "strong":
+            clean_type = clean_type or "verified_rule"
+            clean_status = clean_status or "approved"
+        elif clean_enforcement == "soft" and clean_status is None and clean_type is None:
+            clean_status = "draft"
+            clean_type = "soft_hint"
+
         if clean_type is not None:
             assignments.append("knowledge_type = ?")
             values.append(clean_type)
@@ -894,6 +943,13 @@ class JobKnowledgeStore:
                 values.append(0)
             if clean_status == "approved":
                 clear_conflicts = True
+                if clean_enforcement is None:
+                    clean_enforcement = "strong"
+            elif clean_status == "draft" and clean_enforcement is None:
+                clean_enforcement = "soft"
+        if clean_enforcement is not None:
+            assignments.append("enforcement_level = ?")
+            values.append(clean_enforcement)
         if clear_conflicts:
             assignments.append("conflicts_json = ?")
             values.append("[]")
@@ -1019,6 +1075,7 @@ class JobKnowledgeStore:
         scored.sort(
             key=lambda item: (
                 item[0],
+                enforcement_rank(item[1].enforcement_level),
                 1 if item[1].review_status == "approved" else 0,
                 item[1].priority,
                 item[1].confidence,
@@ -1032,7 +1089,7 @@ class JobKnowledgeStore:
             rows = connection.execute(
                 """
                 SELECT id, knowledge_type, review_status, title, aliases_json,
-                       match_fields_json, applies_when, hint,
+                       match_fields_json, enforcement_level, applies_when, hint,
                        target_major_job, target_sub_job, target_device, target_unit_job,
                        target_detail_job_1, target_detail_job_2, priority, confidence,
                        active, validation_errors_json, conflicts_json, updated_at
@@ -1059,6 +1116,11 @@ class JobKnowledgeStore:
 
         if score > 0:
             score += knowledge.confidence * 2.0
+            if knowledge.enforcement_level == "near_hard":
+                score += 18.0
+                score *= 1.35
+            elif knowledge.enforcement_level == "strong":
+                score += 5.0
             if knowledge.review_status == "approved":
                 score += 2.0
             if knowledge.knowledge_type == "verified_rule":
@@ -1074,6 +1136,10 @@ class JobKnowledgeStore:
     ) -> float:
         score = 0.0
         base = max(1.0, knowledge.priority / 20.0)
+        if knowledge.enforcement_level == "near_hard":
+            base += 8.0
+        elif knowledge.enforcement_level == "strong":
+            base += 3.0
         if knowledge.review_status == "approved":
             base += 2.0
         if knowledge.knowledge_type == "verified_rule":
@@ -1442,6 +1508,18 @@ def stronger_knowledge_type(current: str, candidate: str) -> str:
         "verified_rule": 5,
     }
     return candidate if rank.get(candidate, 0) > rank.get(current, 0) else current
+
+
+def enforcement_rank(value: str) -> int:
+    return {
+        "soft": 1,
+        "strong": 2,
+        "near_hard": 3,
+    }.get(value, 1)
+
+
+def stronger_enforcement_level(current: str, candidate: str) -> str:
+    return candidate if enforcement_rank(candidate) > enforcement_rank(current) else current
 
 
 def fallback_knowledge_draft(raw_text: str) -> KnowledgeDraft:

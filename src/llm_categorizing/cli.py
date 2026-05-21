@@ -229,6 +229,9 @@ def build_output_row(
             "used_knowledge_review_statuses": json_list(
                 result.get("used_knowledge_review_statuses", [])
             ),
+            "used_knowledge_enforcement_levels": json_list(
+                result.get("used_knowledge_enforcement_levels", [])
+            ),
             "used_knowledge_match_fields": json_list(
                 result.get("used_knowledge_match_fields", [])
             ),

@@ -194,6 +194,9 @@ class OpenAICompatibleJobClassifier:
         result["used_knowledge_types"] = [item.knowledge_type for item in knowledge_items]
         result["used_knowledge_scores"] = [round(item.match_score, 3) for item in knowledge_items]
         result["used_knowledge_review_statuses"] = [item.review_status for item in knowledge_items]
+        result["used_knowledge_enforcement_levels"] = [
+            item.enforcement_level for item in knowledge_items
+        ]
         result["used_knowledge_match_fields"] = [
             ",".join(item.match_fields) for item in knowledge_items
         ]

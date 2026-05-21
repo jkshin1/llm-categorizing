@@ -312,6 +312,10 @@ INDEX_HTML = """<!doctype html>
       background: #fef3f2;
       color: var(--danger);
     }
+    .badge.rule {
+      background: #eef5ff;
+      color: #2457a6;
+    }
     .hint {
       line-height: 1.5;
       white-space: pre-wrap;
@@ -479,6 +483,7 @@ INDEX_HTML = """<!doctype html>
           })
           .join("");
         const isVerified = entry.knowledge_type === "verified_rule" || entry.review_status === "approved";
+        const isNearHard = entry.enforcement_level === "near_hard";
         return `
           <article class="item ${entry.active ? "" : "inactive"}" data-id="${escapeHtml(entry.id)}">
             <div class="item-head">
@@ -488,6 +493,7 @@ INDEX_HTML = """<!doctype html>
               </div>
               <div class="row-actions">
                 <button type="button" data-action="${isVerified ? "draft" : "approve"}">${isVerified ? "초안" : "승격"}</button>
+                <button type="button" data-action="${isNearHard ? "strong-rule" : "near-hard-rule"}">${isNearHard ? "준하드 해제" : "준하드룰"}</button>
                 ${conflicts ? '<button type="button" data-action="clear-conflicts">충돌 해제</button>' : ""}
                 <button type="button" data-action="toggle">${entry.active ? "비활성" : "활성"}</button>
                 <button type="button" class="danger" data-action="delete">삭제</button>
@@ -496,6 +502,7 @@ INDEX_HTML = """<!doctype html>
             <div class="badges">
               <span class="badge">${escapeHtml(entry.knowledge_type)}</span>
               <span class="badge">${escapeHtml(entry.review_status)}</span>
+              <span class="badge ${isNearHard ? "rule" : ""}">${escapeHtml(entry.enforcement_level || "soft")}</span>
               ${matchFields ? '<span class="badge">적용 입력</span>' : ""}
               ${validationErrors ? '<span class="badge warn">검증 경고</span>' : ""}
               ${conflicts ? '<span class="badge danger">충돌 확인</span>' : ""}
@@ -590,12 +597,22 @@ INDEX_HTML = """<!doctype html>
         } else if (action === "approve") {
           await requestJson(`/api/knowledge/${id}/metadata`, {
             method: "POST",
-            body: JSON.stringify({ knowledge_type: "verified_rule", review_status: "approved" })
+            body: JSON.stringify({ knowledge_type: "verified_rule", review_status: "approved", enforcement_level: "strong" })
           });
         } else if (action === "draft") {
           await requestJson(`/api/knowledge/${id}/metadata`, {
             method: "POST",
-            body: JSON.stringify({ knowledge_type: "soft_hint", review_status: "draft" })
+            body: JSON.stringify({ knowledge_type: "soft_hint", review_status: "draft", enforcement_level: "soft" })
+          });
+        } else if (action === "near-hard-rule") {
+          await requestJson(`/api/knowledge/${id}/metadata`, {
+            method: "POST",
+            body: JSON.stringify({ enforcement_level: "near_hard" })
+          });
+        } else if (action === "strong-rule") {
+          await requestJson(`/api/knowledge/${id}/metadata`, {
+            method: "POST",
+            body: JSON.stringify({ enforcement_level: "strong" })
           });
         } else if (action === "clear-conflicts") {
           await requestJson(`/api/knowledge/${id}/metadata`, {
@@ -827,6 +844,7 @@ class KnowledgeRequestHandler(BaseHTTPRequestHandler):
                 entry_id,
                 knowledge_type=payload.get("knowledge_type"),
                 review_status=payload.get("review_status"),
+                enforcement_level=payload.get("enforcement_level"),
                 clear_conflicts=bool(payload.get("clear_conflicts", False)),
             )
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
