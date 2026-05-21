@@ -157,3 +157,63 @@ def test_classifier_includes_previous_year_classification_in_prompt_and_output()
     assert previous_payload["is_soft_continuity_hint"] is True
     assert result["previous_year"] == "2023"
     assert result["previous_year_job_path"] == "공정 > Etch공정 > NAND > Chamber > Clean"
+
+
+def test_classifier_omits_previous_year_when_current_review_is_specific() -> None:
+    classifier = _classifier(_taxonomy())
+    captured: dict[str, object] = {}
+
+    def fixed_uncached(self, context_json, diagnosis_priority, knowledge_items):
+        captured["context"] = json.loads(context_json)
+        return {
+            "중직무": "공정",
+            "소직무": "Etch공정",
+            "Device": "NAND",
+            "단위 직무": "Chamber",
+            "세부 직무1": "Clean",
+            "세부 직무2": "",
+            "confidence": 0.91,
+            "reason": "현재 연도 self_review가 충분히 구체적임",
+            "needs_review": False,
+            "ambiguity_reason": "",
+            "guardrail_reason": "",
+            "diagnosis_priority_reason": "",
+            "knowledge_priority_reason": "",
+            "error": "",
+        }
+
+    classifier._classify_uncached = MethodType(fixed_uncached, classifier)
+    previous_context = build_previous_year_context(
+        2023,
+        {
+            "중직무": "소자",
+            "소직무": "Device",
+            "Device": "NAND",
+            "단위 직무": "CG2",
+            "세부 직무1": "M0C",
+            "세부 직무2": "",
+            "confidence": 0.88,
+            "needs_review": False,
+            "reason": "전년도 CG2 M0C 업무",
+        },
+    )
+    current_review = (
+        "2022년 동안 Colosseum M0C 공정을 담당하며 M0C ETCH Set Up, "
+        "Phase0/Phase1 chamber Capa 확보, MCL Not Open 개선 split 평가, "
+        "M0C ETCH APC 적용, CD 가변 Para. ACL OE 적용을 통해 MPH와 CD 산포를 개선했습니다."
+    )
+
+    result = classifier.classify_row(
+        {
+            "year": "2024",
+            "team": "",
+            "emp_num": "E0001",
+            "name": "A",
+            "self_review": current_review,
+        },
+        previous_year_context=previous_context,
+    )
+
+    assert "previous_year_classification" not in captured["context"]
+    assert result["previous_year"] == ""
+    assert result["previous_year_job_path"] == ""

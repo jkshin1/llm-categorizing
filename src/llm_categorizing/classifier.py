@@ -68,6 +68,7 @@ class ClassificationConfig:
     validation_attempts: int = 2
     api_retry_attempts: int = 5
     confidence_review_threshold: float = 0.6
+    previous_year_min_current_review_chars: int = 120
 
 
 @dataclass(frozen=True)
@@ -167,7 +168,10 @@ class OpenAICompatibleJobClassifier:
             knowledge_items,
         )
         diagnosis_priority = self._diagnosis_priority(diagnosis_context)
-        previous_year_payload = self._previous_year_prompt_payload(previous_year_context)
+        previous_year_payload = self._previous_year_prompt_payload(
+            previous_year_context,
+            current_review=review_for_prompt,
+        )
         context_json = employee_context(
             year=normalize_cell(row.get("year", "")),
             team=normalize_cell(row.get("team", "")),
@@ -875,8 +879,12 @@ class OpenAICompatibleJobClassifier:
     def _previous_year_prompt_payload(
         self,
         previous_year_context: dict[str, Any] | None,
+        *,
+        current_review: str = "",
     ) -> dict[str, object] | None:
         if not previous_year_context:
+            return None
+        if self._current_review_has_sufficient_evidence(current_review):
             return None
 
         source_classification = previous_year_context.get("classification")
@@ -902,6 +910,9 @@ class OpenAICompatibleJobClassifier:
         if reason:
             payload["reason"] = reason[:500]
         return payload
+
+    def _current_review_has_sufficient_evidence(self, review: str) -> bool:
+        return len(normalize_cell(review)) >= self.config.previous_year_min_current_review_chars
 
     def _previous_year_output_payload(
         self,
@@ -1001,9 +1012,11 @@ class OpenAICompatibleJobClassifier:
             "extra_body": self.settings.extra_body or {},
             "include_team": self.config.include_team_in_prompt,
             "confidence_review_threshold": self.config.confidence_review_threshold,
+            "previous_year_min_current_review_chars": self.config.previous_year_min_current_review_chars,
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
             "near_hard_knowledge_policy": "diagnosis_job_name_precedence_v2",
-            "stage2_pair_recovery_policy": "exact_path_reason_v1",
+            "previous_year_prompt_policy": "fallback_only_when_current_review_short_v1",
+            "stage2_pair_recovery_policy": "reason_major_sub_match_v2",
             "knowledge_review_scope": self.config.knowledge_review_scope,
             "prompt_version": PROMPT_VERSION,
         }
@@ -1054,7 +1067,10 @@ def _reason_mentions_pair_path(reason: str, pair: dict[str, str]) -> bool:
 
     compact_reason = re.sub(r"\s+", "", normalize_cell(reason).casefold())
     compact_path = re.sub(r"\s+", "", f"{major_job}>{sub_job}".casefold())
-    return compact_path in compact_reason
+    if compact_path in compact_reason:
+        return True
+
+    return _text_match_score(major_job, reason) > 0 and _text_match_score(sub_job, reason) > 0
 
 
 def _text_match_score(target: object, source: object) -> int:

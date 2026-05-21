@@ -215,8 +215,8 @@ def test_stage2_reason_can_recover_available_pair_after_stage1_mispick() -> None
                 confidence=0.35,
                 needs_review=True,
                 reason=(
-                    "self_review의 핵심 업무는 M0C ETCH 공정 조건/장비/Capa/APC 개선이므로 "
-                    "'공정 > Etch공정'이 맞으나 제공된 후보 목록에 없어 NAND Device 후보를 선택함."
+                    "self_review의 핵심 업무는 M0C ETCH 공정 조건/장비/Capa/APC 개선임. "
+                    "제공된 후보 목록에 공정 관련 계층이 없어 NAND Device 후보를 선택함."
                 ),
             )
         return FinalClassificationResult(
