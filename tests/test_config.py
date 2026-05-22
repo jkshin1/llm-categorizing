@@ -4,9 +4,11 @@ from llm_categorizing.config import LLMSettings
 def _base_env(monkeypatch, model: str) -> None:
     monkeypatch.setenv("LLM_ENDPOINT_PROFILE", "internal")
     monkeypatch.setenv("INTERNAL_LLM_BASE_URL", "http://localhost:1/v1")
+    monkeypatch.setenv("INTERNAL_LLM_API_KEYS", "")
     monkeypatch.setenv("INTERNAL_LLM_API_KEY", "test")
     monkeypatch.setenv("INTERNAL_LLM_MODEL", model)
     monkeypatch.setenv("ALIBABA_BASE_URL", "")
+    monkeypatch.setenv("ALIBABA_API_KEYS", "")
     monkeypatch.setenv("ALIBABA_API_KEY", "")
     monkeypatch.setenv("ALIBABA_MODEL", "")
     monkeypatch.setenv("LLM_MODEL", "")
@@ -136,6 +138,17 @@ def test_knowledge_role_can_use_qwen_thinking_disabled_while_shared_model_is_glm
     assert settings.extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
 
 
+def test_internal_endpoint_profile_accepts_multiple_api_keys(monkeypatch) -> None:
+    _base_env(monkeypatch, "glm-5.1")
+    monkeypatch.setenv("INTERNAL_LLM_API_KEY", "internal-key-1, internal-key-2")
+
+    settings = LLMSettings.from_env()
+
+    assert settings.endpoint_profile == "internal"
+    assert settings.api_key == "internal-key-1"
+    assert settings.api_keys == ("internal-key-1", "internal-key-2")
+
+
 def test_alibaba_endpoint_profile_uses_alibaba_env(monkeypatch) -> None:
     _base_env(monkeypatch, "internal-prod-model")
     monkeypatch.setenv("LLM_ENDPOINT_PROFILE", "alibaba")
@@ -148,8 +161,38 @@ def test_alibaba_endpoint_profile_uses_alibaba_env(monkeypatch) -> None:
     assert settings.endpoint_profile == "alibaba"
     assert settings.base_url == "https://dashscope.example.com/compatible-mode/v1"
     assert settings.api_key == "alibaba-test"
+    assert settings.api_keys == ("alibaba-test",)
     assert settings.model == "qwen-plus"
     assert settings.provider_profile == "qwen"
+
+
+def test_alibaba_endpoint_profile_accepts_multiple_api_keys(monkeypatch) -> None:
+    _base_env(monkeypatch, "internal-prod-model")
+    monkeypatch.setenv("LLM_ENDPOINT_PROFILE", "alibaba")
+    monkeypatch.setenv("ALIBABA_BASE_URL", "https://dashscope.example.com/compatible-mode/v1")
+    monkeypatch.setenv("ALIBABA_API_KEY", "")
+    monkeypatch.setenv("ALIBABA_API_KEYS", "alibaba-key-1, alibaba-key-2")
+    monkeypatch.setenv("ALIBABA_MODEL", "qwen-plus")
+
+    settings = LLMSettings.from_env()
+
+    assert settings.endpoint_profile == "alibaba"
+    assert settings.api_key == "alibaba-key-1"
+    assert settings.api_keys == ("alibaba-key-1", "alibaba-key-2")
+
+
+def test_role_scoped_alibaba_api_keys_override_shared_keys(monkeypatch) -> None:
+    _base_env(monkeypatch, "internal-prod-model")
+    monkeypatch.setenv("LLM_ENDPOINT_PROFILE", "alibaba")
+    monkeypatch.setenv("ALIBABA_BASE_URL", "https://dashscope.example.com/compatible-mode/v1")
+    monkeypatch.setenv("ALIBABA_API_KEYS", "shared-1,shared-2")
+    monkeypatch.setenv("ALIBABA_MODEL", "qwen-plus")
+    monkeypatch.setenv("CLASSIFICATION_ALIBABA_API_KEYS", '["class-1", "class-2"]')
+
+    settings = LLMSettings.from_env(role="classification")
+
+    assert settings.api_key == "class-1"
+    assert settings.api_keys == ("class-1", "class-2")
 
 
 def test_auto_endpoint_profile_falls_back_to_alibaba_when_internal_is_missing(monkeypatch) -> None:

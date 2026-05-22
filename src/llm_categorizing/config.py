@@ -45,6 +45,7 @@ class LLMSettings:
     base_url: str
     api_key: str
     model: str
+    api_keys: tuple[str, ...] = ()
     temperature: float = 0.0
     timeout_seconds: float = DEFAULT_LLM_TIMEOUT_SECONDS
     max_tokens: int = DEFAULT_LLM_MAX_TOKENS
@@ -59,7 +60,7 @@ class LLMSettings:
         env = _ScopedEnv(role)
 
         endpoint_profile = _endpoint_profile_from_env(env)
-        base_url, api_key, model, resolved_endpoint_profile = _endpoint_settings_from_env(
+        base_url, api_keys, model, resolved_endpoint_profile = _endpoint_settings_from_env(
             endpoint_profile,
             env,
         )
@@ -68,7 +69,8 @@ class LLMSettings:
 
         return cls(
             base_url=base_url,
-            api_key=api_key,
+            api_key=api_keys[0],
+            api_keys=api_keys,
             model=model,
             temperature=float(env.get("LLM_TEMPERATURE", "0")),
             timeout_seconds=float(
@@ -80,6 +82,13 @@ class LLMSettings:
             endpoint_profile=resolved_endpoint_profile,
             provider_profile=provider_profile,
         )
+
+    def normalized_api_keys(self) -> tuple[str, ...]:
+        keys = tuple(key.strip() for key in self.api_keys if key and key.strip())
+        if keys:
+            return keys
+        api_key = self.api_key.strip()
+        return (api_key,) if api_key else ()
 
 
 def _endpoint_profile_from_env(env: _ScopedEnv) -> str:
@@ -93,60 +102,101 @@ def _endpoint_profile_from_env(env: _ScopedEnv) -> str:
 def _endpoint_settings_from_env(
     endpoint_profile: str,
     env: _ScopedEnv,
-) -> tuple[str, str, str, str]:
+) -> tuple[str, tuple[str, ...], str, str]:
     if endpoint_profile == "auto":
         for candidate in ["internal", "alibaba"]:
-            base_url, api_key, model, _ = _endpoint_candidate_from_env(candidate, env)
-            if base_url and api_key and model:
-                return base_url, api_key, model, candidate
+            base_url, api_keys, model, _ = _endpoint_candidate_from_env(candidate, env)
+            if base_url and api_keys and model:
+                return base_url, api_keys, model, candidate
         raise ValueError(
             "Missing required environment variables for an LLM endpoint: "
-            f"set {env.label('INTERNAL_LLM_BASE_URL')}/{env.label('INTERNAL_LLM_API_KEY')}/"
-            f"{env.label('INTERNAL_LLM_MODEL')} or {env.label('ALIBABA_BASE_URL')}/"
-            f"{env.label('ALIBABA_API_KEY')}/{env.label('ALIBABA_MODEL')}"
+            f"set {env.label('INTERNAL_LLM_BASE_URL')}/"
+            f"{env.label('INTERNAL_LLM_API_KEYS')} or {env.label('INTERNAL_LLM_API_KEY')}/"
+            f"{env.label('INTERNAL_LLM_MODEL')} or "
+            f"{env.label('ALIBABA_BASE_URL')}/"
+            f"{env.label('ALIBABA_API_KEYS')} or {env.label('ALIBABA_API_KEY')}/"
+            f"{env.label('ALIBABA_MODEL')}"
         )
 
-    base_url, api_key, model, required = _endpoint_candidate_from_env(endpoint_profile, env)
+    base_url, api_keys, model, required = _endpoint_candidate_from_env(endpoint_profile, env)
     missing = [name for name, value in required.items() if not value]
     if missing:
         joined = ", ".join(missing)
         raise ValueError(f"Missing required environment variables for {endpoint_profile}: {joined}")
-    return base_url, api_key, model, endpoint_profile
+    return base_url, api_keys, model, endpoint_profile
 
 
 def _endpoint_candidate_from_env(
     endpoint_profile: str,
     env: _ScopedEnv,
-) -> tuple[str, str, str, dict[str, str]]:
+) -> tuple[str, tuple[str, ...], str, dict[str, object]]:
     common_model = env.get("LLM_MODEL", "").strip()
     if endpoint_profile == "alibaba":
         base_url = env.get("ALIBABA_BASE_URL", "").strip()
-        api_key = env.get("ALIBABA_API_KEY", "").strip()
+        api_keys = _api_keys_from_env(env, "ALIBABA_API_KEYS", "ALIBABA_API_KEY")
         model = env.get("ALIBABA_MODEL", "").strip() or common_model
         return (
             base_url,
-            api_key,
+            api_keys,
             model,
             {
                 env.label("ALIBABA_BASE_URL"): base_url,
-                env.label("ALIBABA_API_KEY"): api_key,
+                f"{env.label('ALIBABA_API_KEYS')} or {env.label('ALIBABA_API_KEY')}": api_keys,
                 f"{env.label('ALIBABA_MODEL')} or {env.label('LLM_MODEL')}": model,
             },
         )
 
     base_url = env.get("INTERNAL_LLM_BASE_URL", "").strip()
-    api_key = env.get("INTERNAL_LLM_API_KEY", "").strip()
+    api_keys = _api_keys_from_env(env, "INTERNAL_LLM_API_KEYS", "INTERNAL_LLM_API_KEY")
     model = env.get("INTERNAL_LLM_MODEL", "").strip() or common_model
     return (
         base_url,
-        api_key,
+        api_keys,
         model,
         {
             env.label("INTERNAL_LLM_BASE_URL"): base_url,
-            env.label("INTERNAL_LLM_API_KEY"): api_key,
+            f"{env.label('INTERNAL_LLM_API_KEYS')} or {env.label('INTERNAL_LLM_API_KEY')}": api_keys,
             f"{env.label('INTERNAL_LLM_MODEL')} or {env.label('LLM_MODEL')}": model,
         },
     )
+
+
+def _api_keys_from_env(
+    env: _ScopedEnv,
+    plural_name: str,
+    singular_name: str,
+) -> tuple[str, ...]:
+    raw_plural = env.get(plural_name, "").strip()
+    if raw_plural:
+        return _parse_api_keys(raw_plural, env.label(plural_name))
+
+    raw_singular = env.get(singular_name, "").strip()
+    if raw_singular:
+        return _parse_api_keys(raw_singular, env.label(singular_name))
+    return ()
+
+
+def _parse_api_keys(raw: str, env_name: str) -> tuple[str, ...]:
+    stripped = raw.strip()
+    if not stripped:
+        return ()
+
+    if stripped.startswith("["):
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"{env_name} must be a comma-separated list or a JSON string array"
+            ) from exc
+        if not isinstance(parsed, list) or not all(isinstance(item, str) for item in parsed):
+            raise ValueError(f"{env_name} must be a JSON string array")
+        keys = tuple(item.strip() for item in parsed if item.strip())
+    else:
+        keys = tuple(part.strip() for part in stripped.split(",") if part.strip())
+
+    if not keys:
+        raise ValueError(f"{env_name} must contain at least one non-empty API key")
+    return keys
 
 
 def _provider_profile_from_env(model: str, env: _ScopedEnv) -> str:

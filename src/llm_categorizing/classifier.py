@@ -3,9 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from pydantic import ValidationError
@@ -133,11 +136,18 @@ class OpenAICompatibleJobClassifier:
         self.config = config
         self.cache = cache
         self.knowledge_store = knowledge_store
-        self.client = OpenAI(
-            base_url=settings.base_url,
-            api_key=settings.api_key,
-            timeout=settings.timeout_seconds,
+        self._openai_client_class = OpenAI
+        self._api_keys = settings.normalized_api_keys()
+        if not self._api_keys:
+            raise ValueError("LLM api_key must not be empty")
+        self._api_key_lock = Lock()
+        self._next_api_key_index = 0
+        self._active_api_key: ContextVar[str | None] = ContextVar(
+            "active_llm_api_key",
+            default=None,
         )
+        self._clients_by_api_key: dict[str, Any] = {}
+        self.client = self._client_for_api_key(self._api_keys[0])
 
         pair_count = len(self.taxonomy.pairs())
         if pair_count > config.max_candidates_per_prompt:
@@ -197,7 +207,8 @@ class OpenAICompatibleJobClassifier:
                 return result
 
         try:
-            result = self._classify_uncached(context_json, diagnosis_priority, knowledge_items)
+            with self._api_key_scope_for_classification():
+                result = self._classify_uncached(context_json, diagnosis_priority, knowledge_items)
         except Exception as exc:
             result = self._review_required_result(f"classification_error: {exc}")
 
@@ -1022,13 +1033,43 @@ class OpenAICompatibleJobClassifier:
             reraise=True,
         ):
             with attempt:
-                completion = self.client.chat.completions.create(**payload)
+                completion = self._current_client().chat.completions.create(**payload)
                 choice = completion.choices[0]
                 content = choice.message.content
                 if not content:
                     raise ValueError(self._empty_response_error(choice))
                 return content
         raise RuntimeError("unreachable retry state")
+
+    @contextmanager
+    def _api_key_scope_for_classification(self):
+        api_key = self._next_api_key_for_classification()
+        token = self._active_api_key.set(api_key)
+        try:
+            yield
+        finally:
+            self._active_api_key.reset(token)
+
+    def _next_api_key_for_classification(self) -> str:
+        with self._api_key_lock:
+            api_key = self._api_keys[self._next_api_key_index]
+            self._next_api_key_index = (self._next_api_key_index + 1) % len(self._api_keys)
+            return api_key
+
+    def _current_client(self) -> Any:
+        api_key = self._active_api_key.get() or self._api_keys[0]
+        return self._client_for_api_key(api_key)
+
+    def _client_for_api_key(self, api_key: str) -> Any:
+        client = self._clients_by_api_key.get(api_key)
+        if client is None:
+            client = self._openai_client_class(
+                base_url=self.settings.base_url,
+                api_key=api_key,
+                timeout=self.settings.timeout_seconds,
+            )
+            self._clients_by_api_key[api_key] = client
+        return client
 
     def _empty_response_error(self, choice: Any) -> str:
         message = choice.message

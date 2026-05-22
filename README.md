@@ -47,6 +47,14 @@ LLM_PROVIDER_PROFILE=auto
 LLM_TIMEOUT_SECONDS=300
 ```
 
+사내 LLM API key를 여러 개 써서 분류 호출량을 나누려면 기존 `INTERNAL_LLM_API_KEY`에 쉼표 구분으로 넣거나, 더 명확하게 `INTERNAL_LLM_API_KEYS`를 사용합니다. 여러 key가 있으면 cache miss가 난 분류 1건마다 다음 key로 순환하고, 한 분류 안의 Stage 1/2 호출은 같은 key를 유지합니다.
+
+```text
+INTERNAL_LLM_API_KEY=internal-key-1,internal-key-2,internal-key-3
+# 또는
+INTERNAL_LLM_API_KEYS=["internal-key-1","internal-key-2","internal-key-3"]
+```
+
 분류 판단 모델과 지식 저장/메모리 정리 모델은 역할별 환경변수로 따로 지정할 수 있습니다. 역할별 값이 있으면 우선 사용하고, 없으면 위 공통 `LLM_*`/`INTERNAL_LLM_*`/`ALIBABA_*` 값을 fallback으로 사용합니다.
 
 ```text
@@ -72,6 +80,14 @@ ALIBABA_API_KEY=replace-me
 ALIBABA_MODEL=qwen-plus
 LLM_PROVIDER_PROFILE=qwen
 LLM_QWEN_DISABLE_THINKING=0
+```
+
+Alibaba API key를 여러 개 써서 분류 호출량을 나누려면 `ALIBABA_API_KEYS`에 쉼표 구분 또는 JSON 배열 문자열로 넣습니다. 기존 `ALIBABA_API_KEY`만 있으면 단일 key로 동작합니다.
+
+```text
+ALIBABA_API_KEYS=key-1,key-2,key-3
+# 또는
+ALIBABA_API_KEYS=["key-1","key-2","key-3"]
 ```
 
 Alibaba endpoint에서 역할별 모델만 나누려면 아래처럼 `CLASSIFICATION_ALIBABA_MODEL`, `KNOWLEDGE_ALIBABA_MODEL`을 사용하세요.
