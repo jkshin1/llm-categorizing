@@ -193,7 +193,8 @@ class OpenAICompatibleJobClassifier:
             previous_year_classification=previous_year_payload,
         )
 
-        cache_key = self._cache_key(context_json)
+        cache_identity = self._cache_identity_payload(row)
+        cache_key = self._cache_key(context_json, cache_identity=cache_identity)
         if self.cache:
             cached = self.cache.get(cache_key)
             if cached:
@@ -236,6 +237,7 @@ class OpenAICompatibleJobClassifier:
         result["taxonomy_version"] = self.taxonomy.version_hash()
         result["model_name"] = self.settings.model
         result["classified_at"] = datetime.now(timezone.utc).isoformat()
+        result.update(cache_identity)
         if self.knowledge_store:
             self.knowledge_store.record_usage(
                 classification_id=cache_key,
@@ -1085,9 +1087,15 @@ class OpenAICompatibleJobClassifier:
             f" (finish_reason={finish_reason}, message_non_empty_keys={extra_keys})"
         )
 
-    def _cache_key(self, context_json: str) -> str:
+    def _cache_key(
+        self,
+        context_json: str,
+        *,
+        cache_identity: dict[str, str] | None = None,
+    ) -> str:
         payload = {
             "context": context_json,
+            "cache_identity": cache_identity or {},
             "taxonomy_version": self.taxonomy.version_hash(),
             "knowledge_version": self._knowledge_version(),
             "model": self.settings.model,
@@ -1108,6 +1116,13 @@ class OpenAICompatibleJobClassifier:
         }
         raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _cache_identity_payload(self, row: dict[str, Any]) -> dict[str, str]:
+        return {
+            "year": normalize_cell(row.get("year", "")),
+            "emp_num": normalize_cell(row.get("emp_num", "")),
+            "name": normalize_cell(row.get("name", "")),
+        }
 
     def _knowledge_version(self) -> str:
         return self.knowledge_store.version_hash() if self.knowledge_store else ""

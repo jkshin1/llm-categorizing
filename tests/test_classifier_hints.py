@@ -1,6 +1,12 @@
+import json
 from types import MethodType
 
-from llm_categorizing.classifier import ClassificationConfig, OpenAICompatibleJobClassifier, extract_json_object
+from llm_categorizing.classifier import (
+    ClassificationConfig,
+    JsonlCache,
+    OpenAICompatibleJobClassifier,
+    extract_json_object,
+)
 from llm_categorizing.config import LLMSettings
 from llm_categorizing.diagnosis import DiagnosisContext
 from llm_categorizing.knowledge import JobKnowledgeStore, KnowledgeDraft
@@ -432,6 +438,77 @@ def test_cache_key_includes_confidence_review_threshold() -> None:
 
     assert low_threshold._cache_key('{"self_review": "x"}') != high_threshold._cache_key(
         '{"self_review": "x"}'
+    )
+
+
+def test_cache_value_includes_source_identity(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "공정",
+                "소직무": "Etch공정",
+                "Device": "NAND",
+                "단위 직무": "Chamber",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            }
+        ]
+    )
+    cache_path = tmp_path / "classification_cache.jsonl"
+    classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(),
+        cache=JsonlCache(cache_path),
+    )
+
+    def fixed_uncached(self, context_json, diagnosis_priority, knowledge_items):
+        return {
+            "중직무": "공정",
+            "소직무": "Etch공정",
+            "Device": "NAND",
+            "단위 직무": "Chamber",
+            "세부 직무1": "",
+            "세부 직무2": "",
+            "confidence": 0.9,
+            "reason": "cache identity test",
+            "needs_review": False,
+            "ambiguity_reason": "",
+            "guardrail_reason": "",
+            "diagnosis_priority_reason": "",
+            "knowledge_priority_reason": "",
+            "error": "",
+        }
+
+    classifier._classify_uncached = MethodType(fixed_uncached, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2026",
+            "team": "",
+            "emp_num": "E1234",
+            "name": "홍길동",
+            "self_review": "Etch 공정 개선",
+        }
+    )
+
+    cache_item = json.loads(cache_path.read_text(encoding="utf-8").splitlines()[0])
+    assert result["year"] == "2026"
+    assert result["emp_num"] == "E1234"
+    assert result["name"] == "홍길동"
+    assert cache_item["value"]["year"] == "2026"
+    assert cache_item["value"]["emp_num"] == "E1234"
+    assert cache_item["value"]["name"] == "홍길동"
+    assert classifier._cache_key(
+        '{"self_review": "x"}',
+        cache_identity={"year": "2026", "emp_num": "E1234", "name": "홍길동"},
+    ) != classifier._cache_key(
+        '{"self_review": "x"}',
+        cache_identity={"year": "2026", "emp_num": "E9999", "name": "김철수"},
     )
 
 
