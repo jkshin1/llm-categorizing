@@ -708,7 +708,7 @@ class OpenAICompatibleJobClassifier:
         scored: list[tuple[int, dict[str, str]]] = []
         for pair in pairs:
             major_score = _text_match_score(pair.get("중직무", ""), review)
-            sub_score = _text_match_score(pair.get("소직무", ""), review)
+            sub_score = _sub_job_signal_score(pair.get("소직무", ""), review)
             if major_score and sub_score:
                 scored.append((major_score + sub_score, pair))
 
@@ -1101,7 +1101,7 @@ class OpenAICompatibleJobClassifier:
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
             "near_hard_knowledge_policy": "diagnosis_job_name_precedence_v2",
             "previous_year_prompt_policy": "fallback_only_when_current_review_short_v1",
-            "self_review_pair_priority_policy": "taxonomy_major_sub_direct_match_v1",
+            "self_review_pair_priority_policy": "taxonomy_major_sub_signal_match_v2",
             "stage2_pair_recovery_policy": "reason_major_sub_match_v2",
             "knowledge_review_scope": self.config.knowledge_review_scope,
             "prompt_version": PROMPT_VERSION,
@@ -1157,6 +1157,44 @@ def _reason_mentions_pair_path(reason: str, pair: dict[str, str]) -> bool:
         return True
 
     return _text_match_score(major_job, reason) > 0 and _text_match_score(sub_job, reason) > 0
+
+
+def _sub_job_signal_score(sub_job: object, review: str) -> int:
+    direct_score = _text_match_score(sub_job, review)
+    if direct_score:
+        return direct_score
+
+    scores = [
+        _text_match_score(alias, review)
+        for alias in _sub_job_signal_aliases(sub_job)
+    ]
+    return max(scores, default=0)
+
+
+def _sub_job_signal_aliases(sub_job: object) -> list[str]:
+    value = normalize_cell(sub_job)
+    aliases: list[str] = []
+    seen: set[str] = set()
+    generic_tokens = {"공정", "process", "job", "업무", "직무"}
+
+    without_generic = value
+    for token in generic_tokens:
+        without_generic = re.sub(re.escape(token), " ", without_generic, flags=re.IGNORECASE)
+
+    candidates = [without_generic]
+    candidates.extend(re.findall(r"[A-Za-z0-9]+|[가-힣]+", value))
+    for candidate in candidates:
+        alias = normalize_cell(candidate)
+        key = _compact_text(alias)
+        if not key or key in generic_tokens or key in seen:
+            continue
+        if len(key) < 3 and key.isascii():
+            continue
+        if len(key) < 2:
+            continue
+        seen.add(key)
+        aliases.append(alias)
+    return aliases
 
 
 def _text_match_score(target: object, source: object) -> int:

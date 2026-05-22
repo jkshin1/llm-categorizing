@@ -239,7 +239,10 @@ def test_self_review_direct_pair_overrides_project_near_hard_major_hint(tmp_path
             "team": "",
             "emp_num": "E0001",
             "name": "홍길동",
-            "self_review": "Colosseum M0C ETCH 공정 조건/장비/Capa 개선 및 APC 적용",
+            "self_review": (
+                "Colosseum Plug Etch UPH 공정 전환, GT2 28Chamber Capa 확보, "
+                "Plug Etch APC Set up을 통한 공정 안정화"
+            ),
         }
     )
 
