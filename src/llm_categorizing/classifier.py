@@ -253,10 +253,19 @@ class OpenAICompatibleJobClassifier:
                 knowledge_priority_reasons.append(
                     "diagnosis 직무명 우선 적용: 준하드룰 지식은 선택된 중직무/소직무 내부의 최종 후보 제한에만 사용"
                 )
-        elif knowledge_priority.rows:
-            pair_candidates, pair_priority_reason = self._knowledge_pair_candidates(knowledge_priority)
-            if pair_priority_reason:
-                knowledge_priority_reasons.append(pair_priority_reason)
+        else:
+            review_pair_candidates, review_pair_reason = self._review_pair_candidates(context_json)
+            if review_pair_reason:
+                pair_candidates = review_pair_candidates
+                applied_priority_reasons.append(review_pair_reason)
+                if knowledge_priority.rows:
+                    knowledge_priority_reasons.append(
+                        "self_review 직접 직무 단서 우선 적용: 준하드룰 지식은 선택된 중직무/소직무 내부의 최종 후보 제한에만 사용"
+                    )
+            elif knowledge_priority.rows:
+                pair_candidates, pair_priority_reason = self._knowledge_pair_candidates(knowledge_priority)
+                if pair_priority_reason:
+                    knowledge_priority_reasons.append(pair_priority_reason)
 
         if len(pair_candidates) == 1:
             pair = pair_candidates[0]
@@ -674,6 +683,41 @@ class OpenAICompatibleJobClassifier:
 
         return pairs, ""
 
+    def _review_pair_candidates(self, context_json: str) -> tuple[list[dict[str, str]], str]:
+        pairs = self.taxonomy.pairs()
+        try:
+            context = json.loads(context_json)
+        except json.JSONDecodeError:
+            return pairs, ""
+
+        review = normalize_cell(context.get("self_review", ""))
+        if not review:
+            return pairs, ""
+
+        scored: list[tuple[int, dict[str, str]]] = []
+        for pair in pairs:
+            major_score = _text_match_score(pair.get("중직무", ""), review)
+            sub_score = _text_match_score(pair.get("소직무", ""), review)
+            if major_score and sub_score:
+                scored.append((major_score + sub_score, pair))
+
+        if not scored:
+            return pairs, ""
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+        top_score = scored[0][0]
+        winners = [pair for score, pair in scored if score == top_score]
+        winner_keys = {self._pair_key(pair) for pair in winners}
+        if len(winner_keys) != 1:
+            return pairs, ""
+
+        pair = dict(winners[0])
+        return (
+            [pair],
+            "self_review 직접 직무 단서 우선 적용: "
+            f"중직무 '{pair['중직무']}', 소직무 '{pair['소직무']}' 기준 stage1 후보 제한",
+        )
+
     def _diagnosis_pair_reason(self, diagnosis_priority: DiagnosisPriority) -> str:
         labels: list[str] = []
         if diagnosis_priority.major_job:
@@ -1016,6 +1060,7 @@ class OpenAICompatibleJobClassifier:
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
             "near_hard_knowledge_policy": "diagnosis_job_name_precedence_v2",
             "previous_year_prompt_policy": "fallback_only_when_current_review_short_v1",
+            "self_review_pair_priority_policy": "taxonomy_major_sub_direct_match_v1",
             "stage2_pair_recovery_policy": "reason_major_sub_match_v2",
             "knowledge_review_scope": self.config.knowledge_review_scope,
             "prompt_version": PROMPT_VERSION,

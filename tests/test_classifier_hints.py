@@ -168,6 +168,87 @@ def test_near_hard_knowledge_limits_taxonomy_candidates(tmp_path) -> None:
     assert final_candidates[0]["Device"] == "NAND"
 
 
+def test_self_review_direct_pair_overrides_project_near_hard_major_hint(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "공정",
+                "소직무": "ETCH공정",
+                "Device": "NAND",
+                "단위 직무": "Chamber",
+                "세부 직무1": "Etch",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "공정",
+                "소직무": "ETCH공정",
+                "Device": "DRAM",
+                "단위 직무": "Chamber",
+                "세부 직무1": "Etch",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "소자",
+                "소직무": "Device",
+                "Device": "NAND",
+                "단위 직무": "Cell",
+                "세부 직무1": "M0C",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "Colosseum 프로젝트는 NAND Device 후보를 검토한다.",
+        KnowledgeDraft(
+            title="Colosseum NAND Device 준하드룰",
+            aliases=["Colosseum"],
+            hint="Colosseum 프로젝트는 Device=NAND로 본다.",
+            target_major_job="소자",
+            target_sub_job="Device",
+            target_device="NAND",
+        ),
+    )
+    store.update_metadata(entry.id, review_status="approved", enforcement_level="near_hard")
+    classifier = _classifier(taxonomy, store)
+
+    def fail_stage1(self, context_json, candidate_pairs=None):
+        raise AssertionError("self_review direct pair should select the pair before stage1")
+
+    def fixed_stage2(self, context_json, candidates):
+        assert {row["중직무"] for row in candidates} == {"공정"}
+        assert {row["소직무"] for row in candidates} == {"ETCH공정"}
+        return FinalClassificationResult(
+            major_job="공정",
+            sub_job="ETCH공정",
+            device="NAND",
+            unit_job="Chamber",
+            detail_job_1="Etch",
+            detail_job_2="",
+            confidence=0.92,
+            needs_review=False,
+            reason="M0C ETCH 공정/장비/Capa 개선 근거",
+        )
+
+    classifier._run_stage1 = MethodType(fail_stage1, classifier)
+    classifier._run_stage2 = MethodType(fixed_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2022",
+            "team": "",
+            "emp_num": "E0001",
+            "name": "홍길동",
+            "self_review": "Colosseum M0C ETCH 공정 조건/장비/Capa 개선 및 APC 적용",
+        }
+    )
+
+    assert result["중직무"] == "공정"
+    assert result["소직무"] == "ETCH공정"
+    assert "self_review 직접 직무 단서 우선 적용" in result["diagnosis_priority_reason"]
+    assert "준하드룰 지식은 선택된 중직무/소직무 내부" in result["knowledge_priority_reason"]
+
+
 def test_stage2_reason_can_recover_available_pair_after_stage1_mispick() -> None:
     taxonomy = Taxonomy.from_rows(
         [
