@@ -117,12 +117,22 @@ class JsonlCache:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps({"cache_key": key, "value": value}, ensure_ascii=False))
+            handle.write(json.dumps(self._cache_record(key, value), ensure_ascii=False))
             handle.write("\n")
 
     @staticmethod
     def _can_reuse(value: dict[str, Any]) -> bool:
         return not value.get("error")
+
+    @staticmethod
+    def _cache_record(key: str, value: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "cache_key": key,
+            "year": value.get("year", ""),
+            "emp_num": value.get("emp_num", ""),
+            "name": value.get("name", ""),
+            "value": value,
+        }
 
 
 class OpenAICompatibleJobClassifier:

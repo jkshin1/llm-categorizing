@@ -500,6 +500,9 @@ def test_cache_value_includes_source_identity(tmp_path) -> None:
     assert result["year"] == "2026"
     assert result["emp_num"] == "E1234"
     assert result["name"] == "홍길동"
+    assert cache_item["year"] == "2026"
+    assert cache_item["emp_num"] == "E1234"
+    assert cache_item["name"] == "홍길동"
     assert cache_item["value"]["year"] == "2026"
     assert cache_item["value"]["emp_num"] == "E1234"
     assert cache_item["value"]["name"] == "홍길동"
@@ -556,6 +559,8 @@ def test_error_result_is_written_to_cache_but_not_reused(tmp_path) -> None:
     assert len(cache_lines) == 1
     failed_cache_item = json.loads(cache_lines[0])
     assert failed_cache_item["value"]["error"] == "classification_error: LLM unavailable"
+    assert failed_cache_item["emp_num"] == "E1234"
+    assert failed_cache_item["name"] == "홍길동"
     assert failed_cache_item["value"]["emp_num"] == "E1234"
 
     call_count = 0
