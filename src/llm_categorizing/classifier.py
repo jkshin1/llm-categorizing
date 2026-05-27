@@ -99,7 +99,11 @@ class JsonlCache:
                     item = json.loads(line)
                     key = item.get("cache_key")
                     value = item.get("value")
-                    if isinstance(key, str) and isinstance(value, dict):
+                    if (
+                        isinstance(key, str)
+                        and isinstance(value, dict)
+                        and self._can_reuse(value)
+                    ):
                         self._items[key] = value
 
     def get(self, key: str) -> dict[str, Any] | None:
@@ -107,13 +111,18 @@ class JsonlCache:
         return dict(value) if value else None
 
     def set(self, key: str, value: dict[str, Any]) -> None:
-        self._items[key] = dict(value)
+        if self._can_reuse(value):
+            self._items[key] = dict(value)
         if not self.path:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps({"cache_key": key, "value": value}, ensure_ascii=False))
             handle.write("\n")
+
+    @staticmethod
+    def _can_reuse(value: dict[str, Any]) -> bool:
+        return not value.get("error")
 
 
 class OpenAICompatibleJobClassifier:
@@ -245,7 +254,7 @@ class OpenAICompatibleJobClassifier:
                 result=result,
             )
 
-        if self.cache and not result.get("error"):
+        if self.cache:
             self.cache.set(cache_key, result)
         return result
 

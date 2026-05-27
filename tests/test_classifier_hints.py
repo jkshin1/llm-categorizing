@@ -512,6 +512,108 @@ def test_cache_value_includes_source_identity(tmp_path) -> None:
     )
 
 
+def test_error_result_is_written_to_cache_but_not_reused(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "공정",
+                "소직무": "Etch공정",
+                "Device": "NAND",
+                "단위 직무": "Chamber",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            }
+        ]
+    )
+    cache_path = tmp_path / "classification_cache.jsonl"
+    classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(),
+        cache=JsonlCache(cache_path),
+    )
+    row = {
+        "year": "2026",
+        "team": "",
+        "emp_num": "E1234",
+        "name": "홍길동",
+        "self_review": "Etch 공정 개선",
+    }
+
+    def failing_uncached(self, context_json, diagnosis_priority, knowledge_items):
+        raise RuntimeError("LLM unavailable")
+
+    classifier._classify_uncached = MethodType(failing_uncached, classifier)
+
+    first_result = classifier.classify_row(row)
+
+    assert first_result["error"] == "classification_error: LLM unavailable"
+    cache_lines = cache_path.read_text(encoding="utf-8").splitlines()
+    assert len(cache_lines) == 1
+    failed_cache_item = json.loads(cache_lines[0])
+    assert failed_cache_item["value"]["error"] == "classification_error: LLM unavailable"
+    assert failed_cache_item["value"]["emp_num"] == "E1234"
+
+    call_count = 0
+
+    def successful_uncached(self, context_json, diagnosis_priority, knowledge_items):
+        nonlocal call_count
+        call_count += 1
+        return {
+            "중직무": "공정",
+            "소직무": "Etch공정",
+            "Device": "NAND",
+            "단위 직무": "Chamber",
+            "세부 직무1": "",
+            "세부 직무2": "",
+            "confidence": 0.9,
+            "reason": "recovered",
+            "needs_review": False,
+            "ambiguity_reason": "",
+            "guardrail_reason": "",
+            "diagnosis_priority_reason": "",
+            "knowledge_priority_reason": "",
+            "error": "",
+        }
+
+    classifier._classify_uncached = MethodType(successful_uncached, classifier)
+
+    second_result = classifier.classify_row(row)
+
+    assert call_count == 1
+    assert second_result["error"] == ""
+    assert second_result["reason"] == "recovered"
+    assert len(cache_path.read_text(encoding="utf-8").splitlines()) == 2
+
+    loaded_classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(),
+        cache=JsonlCache(cache_path),
+    )
+
+    def should_not_call_uncached(self, context_json, diagnosis_priority, knowledge_items):
+        raise AssertionError("successful cache entry should be reused")
+
+    loaded_classifier._classify_uncached = MethodType(
+        should_not_call_uncached,
+        loaded_classifier,
+    )
+
+    cached_result = loaded_classifier.classify_row(row)
+
+    assert cached_result["error"] == ""
+    assert cached_result["reason"] == "recovered"
+
+
 def test_classifier_does_not_retrieve_knowledge_from_diagnosis_items(tmp_path) -> None:
     taxonomy = Taxonomy.from_rows(
         [

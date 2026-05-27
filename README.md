@@ -326,7 +326,7 @@ error,input_truncated,taxonomy_version,model_name,classified_at
 5. diagnosis로 후보가 하나로 좁혀지지 않으면 남은 `중직무`/`소직무` 후보 중 하나를 LLM이 선택합니다.
 6. 선택된 pair의 하위 taxonomy row만 후보로 넣어 최종 계층을 선택합니다.
 7. 최종 결과가 taxonomy CSV의 row와 정확히 일치하는지 검증합니다.
-8. 동일 입력은 `data/output/classification_cache.jsonl`에 캐시해 재실행 비용과 결과 흔들림을 줄입니다.
+8. 동일 입력은 `data/output/classification_cache.jsonl`에 캐시해 재실행 비용과 결과 흔들림을 줄입니다. 분류 에러도 원인 추적을 위해 JSONL에 즉시 기록하지만, 다음 실행의 cache hit 대상으로는 쓰지 않아 일시적 API 장애는 재시도됩니다.
 
 ## 정확도 개선 로직
 
