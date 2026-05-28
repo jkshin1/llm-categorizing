@@ -498,6 +498,97 @@ def test_near_hard_legacy_mapping_requires_matching_diagnosis_job_name(tmp_path)
     assert "diagnosis 직무명 우선 적용" in result["knowledge_priority_reason"]
 
 
+def test_near_hard_legacy_mapping_does_not_use_partial_diagnosis_job_name_alias(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "DIC",
+                "소직무": "DTCO",
+                "Device": "NAND",
+                "단위 직무": "SPICE Modeling",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "DIC",
+                "소직무": "OPC",
+                "Device": "NAND",
+                "단위 직무": "OPC Technology",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "2021~2024년 diagnosis 직무명이 Photo공정이고 self_review에 OPC/SOM/Recipe/Model이 핵심 업무로 나타나면 OPC 업무로 본다.",
+        KnowledgeDraft(
+            title="Photo공정 과거 OPC 매핑",
+            aliases=["Photo공정", "OPC", "SOM", "Recipe", "Model"],
+            match_fields=["diagnosis_job_name", "self_review"],
+            hint="Photo공정 진단명과 OPC/SOM/Recipe/Model 업무 단서가 함께 있으면 DIC > OPC 후보를 우선한다.",
+            target_major_job="DIC",
+            target_sub_job="OPC",
+        ),
+    )
+    store.update_metadata(entry.id, enforcement_level="near_hard")
+    classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(),
+        knowledge_store=store,
+    )
+    diagnosis_context = DiagnosisContext(
+        year="2022",
+        emp_num="E0005",
+        row_count=1,
+        teams=["Device Tech Solution > DTCO"],
+        job_names=["SPICE Modeling"],
+        categories=["미기원-Modeling"],
+        evidence_rows=[],
+    )
+
+    def fail_stage1(self, context_json, candidate_pairs=None):
+        raise AssertionError("diagnosis job name should select the DTCO pair before stage1")
+
+    def fixed_stage2(self, context_json, candidates):
+        assert candidates == [taxonomy.rows[0]]
+        return FinalClassificationResult(
+            major_job="DIC",
+            sub_job="DTCO",
+            device="NAND",
+            unit_job="SPICE Modeling",
+            detail_job_1="",
+            detail_job_2="",
+            confidence=0.91,
+            needs_review=False,
+            reason="진단 직무명 SPICE Modeling과 DTCO team 근거",
+        )
+
+    classifier._run_stage1 = MethodType(fail_stage1, classifier)
+    classifier._run_stage2 = MethodType(fixed_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2022",
+            "team": "",
+            "emp_num": "E0005",
+            "name": "홍길동",
+            "self_review": "DTCO/회로 최적화/SPICE Modeling 수행 및 RB NAND 검토",
+        },
+        diagnosis_context=diagnosis_context,
+    )
+
+    assert result["중직무"] == "DIC"
+    assert result["소직무"] == "DTCO"
+    assert "diagnosis 우선 적용" in result["diagnosis_priority_reason"]
+    assert "준하드룰 지식이 과거 diagnosis 직무명 보정" not in result["diagnosis_priority_reason"]
+
+
 def test_near_hard_legacy_mapping_does_not_override_outside_year_range(tmp_path) -> None:
     taxonomy = Taxonomy.from_rows(
         [
