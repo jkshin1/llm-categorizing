@@ -57,11 +57,14 @@ INDEX_HTML = """<!doctype html>
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 14px;
     }
+    body.modal-open {
+      overflow: hidden;
+    }
     .shell {
-      width: min(1120px, calc(100vw - 32px));
+      width: min(1240px, calc(100vw - 32px));
       margin: 24px auto;
       display: grid;
-      grid-template-columns: minmax(360px, 0.92fr) minmax(420px, 1.08fr);
+      grid-template-columns: minmax(360px, 440px) minmax(0, 1fr);
       gap: 16px;
       align-items: start;
     }
@@ -90,6 +93,7 @@ INDEX_HTML = """<!doctype html>
       border: 1px solid var(--line);
       border-radius: 8px;
       box-shadow: var(--shadow);
+      min-width: 0;
     }
     .composer {
       padding: 16px;
@@ -175,6 +179,7 @@ INDEX_HTML = """<!doctype html>
     }
     textarea {
       width: 100%;
+      max-width: 100%;
       min-height: 152px;
       resize: vertical;
       border: 1px solid var(--line);
@@ -234,6 +239,7 @@ INDEX_HTML = """<!doctype html>
     select {
       width: 100%;
       min-width: 0;
+      max-width: 100%;
       border: 1px solid var(--line);
       border-radius: 6px;
       background: #ffffff;
@@ -266,6 +272,7 @@ INDEX_HTML = """<!doctype html>
       min-height: 36px;
       padding: 0 12px;
       cursor: pointer;
+      white-space: nowrap;
     }
     button.primary {
       background: var(--accent);
@@ -284,33 +291,45 @@ INDEX_HTML = """<!doctype html>
       opacity: 0.55;
     }
     .management {
-      padding: 12px;
+      padding: 14px;
       border-bottom: 1px solid var(--line);
       display: grid;
-      gap: 10px;
+      gap: 12px;
+    }
+    .management-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .panel-title {
+      font-weight: 800;
+      letter-spacing: 0;
     }
     .management-grid {
       display: grid;
-      grid-template-columns: minmax(180px, 1fr) 140px 120px 140px;
+      grid-template-columns: minmax(280px, 2fr) repeat(3, minmax(120px, 1fr));
       gap: 8px;
     }
     .management-actions {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       gap: 8px;
-      align-items: center;
-      justify-content: space-between;
+      align-items: stretch;
     }
     .import-ndjson {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 8px;
       align-items: center;
-      min-width: min(100%, 360px);
+      min-width: 0;
     }
     .export-actions {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 8px;
       align-items: center;
+      min-width: 0;
     }
     .list {
       display: grid;
@@ -320,7 +339,7 @@ INDEX_HTML = """<!doctype html>
     .item {
       border: 1px solid var(--line);
       border-radius: 8px;
-      padding: 12px;
+      padding: 14px;
       background: #ffffff;
       display: grid;
       gap: 8px;
@@ -334,9 +353,13 @@ INDEX_HTML = """<!doctype html>
       justify-content: space-between;
       gap: 12px;
     }
+    .item-head > div:first-child {
+      min-width: 0;
+    }
     .title {
       font-weight: 700;
       line-height: 1.35;
+      overflow-wrap: anywhere;
     }
     .meta {
       color: var(--muted);
@@ -371,6 +394,7 @@ INDEX_HTML = """<!doctype html>
     .hint {
       line-height: 1.5;
       white-space: pre-wrap;
+      overflow-wrap: anywhere;
     }
     .chips {
       display: flex;
@@ -389,7 +413,14 @@ INDEX_HTML = """<!doctype html>
     .row-actions {
       display: flex;
       gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
       flex-shrink: 0;
+      max-width: min(100%, 340px);
+    }
+    .row-actions button {
+      min-height: 32px;
+      padding: 0 10px;
     }
     .empty {
       padding: 32px 16px;
@@ -402,26 +433,24 @@ INDEX_HTML = """<!doctype html>
       background: rgba(17, 24, 39, 0.42);
       display: grid;
       place-items: center;
-      padding: 20px;
+      padding: 24px;
       z-index: 20;
     }
     .modal[hidden] {
       display: none;
     }
     .dialog {
-      width: min(1040px, 100%);
+      width: min(1120px, 100%);
       max-height: min(92vh, 980px);
-      overflow: auto;
+      overflow: hidden;
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: 8px;
       box-shadow: 0 16px 50px rgba(17, 24, 39, 0.24);
       display: grid;
-      gap: 0;
+      grid-template-rows: auto minmax(0, 1fr);
     }
     .dialog-head {
-      position: sticky;
-      top: 0;
       background: var(--panel);
       border-bottom: 1px solid var(--line);
       padding: 14px 16px;
@@ -438,13 +467,36 @@ INDEX_HTML = """<!doctype html>
     }
     .editor {
       padding: 16px;
+      overflow: auto;
       display: grid;
       gap: 14px;
+    }
+    .editor-section {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+      background: #ffffff;
+    }
+    .editor-section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      font-weight: 800;
     }
     .editor-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
+    }
+    .editor-grid.status-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+    .editor-grid.target-grid {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
     }
     .field {
       display: grid;
@@ -459,6 +511,14 @@ INDEX_HTML = """<!doctype html>
       font-size: 12px;
       font-weight: 700;
     }
+    .field.inline-check {
+      display: flex;
+      align-items: center;
+      min-height: 36px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+    }
     .field textarea {
       min-height: 88px;
     }
@@ -466,13 +526,16 @@ INDEX_HTML = """<!doctype html>
       min-height: 132px;
     }
     .editor-actions {
+      position: sticky;
+      bottom: -16px;
+      background: var(--panel);
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       align-items: center;
       justify-content: space-between;
       border-top: 1px solid var(--line);
-      padding-top: 12px;
+      padding: 12px 0 0;
     }
     .side-panels {
       display: grid;
@@ -497,12 +560,14 @@ INDEX_HTML = """<!doctype html>
       display: grid;
       gap: 5px;
     }
-    @media (max-width: 860px) {
+    @media (max-width: 1080px) {
       .shell {
         grid-template-columns: 1fr;
         width: min(100vw - 24px, 680px);
         margin: 16px auto;
       }
+    }
+    @media (max-width: 860px) {
       header {
         align-items: flex-start;
         flex-direction: column;
@@ -520,14 +585,28 @@ INDEX_HTML = """<!doctype html>
       }
       .management-grid,
       .editor-grid,
+      .editor-grid.status-grid,
+      .editor-grid.target-grid,
       .side-panels {
         grid-template-columns: 1fr;
       }
       .management-actions,
       .import-ndjson,
       .export-actions {
-        align-items: stretch;
+        grid-template-columns: 1fr;
+      }
+      .modal {
+        padding: 10px;
+      }
+      .dialog {
+        max-height: calc(100vh - 20px);
+      }
+      .item-head {
         flex-direction: column;
+      }
+      .row-actions {
+        justify-content: flex-start;
+        max-width: 100%;
       }
     }
   </style>
@@ -573,6 +652,10 @@ INDEX_HTML = """<!doctype html>
     </section>
     <section class="panel">
       <div class="management">
+        <div class="management-head">
+          <div class="panel-title">지식 관리</div>
+          <div id="listCount" class="meta"></div>
+        </div>
         <div class="management-grid">
           <input id="searchInput" type="text" placeholder="제목, alias, target 검색">
           <select id="statusFilter">
@@ -621,45 +704,63 @@ INDEX_HTML = """<!doctype html>
         <button id="closeEditorBtn" class="subtle" type="button">닫기</button>
       </div>
       <form id="editorForm" class="editor">
-        <div class="editor-grid">
-          <label class="field full"><span>원문</span><textarea id="editRawText" class="tall"></textarea></label>
-          <label class="field"><span>제목</span><input id="editTitle" type="text"></label>
-          <label class="field"><span>knowledge_type</span><select id="editKnowledgeType">
-            <option value="glossary">glossary</option>
-            <option value="soft_hint">soft_hint</option>
-            <option value="negative_hint">negative_hint</option>
-            <option value="correction">correction</option>
-            <option value="verified_rule">verified_rule</option>
-          </select></label>
-          <label class="field"><span>review_status</span><select id="editReviewStatus">
-            <option value="draft">draft</option>
-            <option value="approved">approved</option>
-            <option value="rejected">rejected</option>
-          </select></label>
-          <label class="field"><span>enforcement_level</span><select id="editEnforcement">
-            <option value="soft">soft</option>
-            <option value="strong">strong</option>
-            <option value="near_hard">near_hard</option>
-          </select></label>
-          <label class="field"><span>priority</span><input id="editPriority" type="number" min="1" max="100"></label>
-          <label class="field"><span>confidence</span><input id="editConfidence" type="number" min="0" max="1" step="0.01"></label>
-          <label class="field"><span>활성</span><select id="editActive">
-            <option value="true">활성</option>
-            <option value="false">비활성</option>
-          </select></label>
-          <label class="field"><span>aliases</span><textarea id="editAliases"></textarea></label>
-          <label class="field"><span>match_fields</span><textarea id="editMatchFields"></textarea></label>
-          <label class="field full"><span>적용 조건</span><textarea id="editAppliesWhen"></textarea></label>
-          <label class="field full"><span>힌트</span><textarea id="editHint" class="tall"></textarea></label>
-          <label class="field"><span>중직무</span><input id="editMajorJob" type="text"></label>
-          <label class="field"><span>소직무</span><input id="editSubJob" type="text"></label>
-          <label class="field"><span>Device</span><input id="editDevice" type="text"></label>
-          <label class="field"><span>단위 직무</span><input id="editUnitJob" type="text"></label>
-          <label class="field"><span>세부 직무1</span><input id="editDetailJob1" type="text"></label>
-          <label class="field"><span>세부 직무2</span><input id="editDetailJob2" type="text"></label>
-        </div>
+        <section class="editor-section">
+          <div class="editor-section-head">운영 상태</div>
+          <div class="editor-grid status-grid">
+            <label class="field full"><span>제목</span><input id="editTitle" type="text"></label>
+            <label class="field"><span>종류</span><select id="editKnowledgeType">
+              <option value="glossary">glossary</option>
+              <option value="soft_hint">soft_hint</option>
+              <option value="negative_hint">negative_hint</option>
+              <option value="correction">correction</option>
+              <option value="verified_rule">verified_rule</option>
+            </select></label>
+            <label class="field"><span>검토</span><select id="editReviewStatus">
+              <option value="draft">draft</option>
+              <option value="approved">approved</option>
+              <option value="rejected">rejected</option>
+            </select></label>
+            <label class="field"><span>강도</span><select id="editEnforcement">
+              <option value="soft">soft</option>
+              <option value="strong">strong</option>
+              <option value="near_hard">near_hard</option>
+            </select></label>
+            <label class="field"><span>우선순위</span><input id="editPriority" type="number" min="1" max="100"></label>
+            <label class="field"><span>신뢰도</span><input id="editConfidence" type="number" min="0" max="1" step="0.01"></label>
+          </div>
+        </section>
+        <section class="editor-section">
+          <div class="editor-section-head">지식 내용</div>
+          <div class="editor-grid">
+            <label class="field full"><span>원문</span><textarea id="editRawText" class="tall"></textarea></label>
+            <label class="field full"><span>힌트</span><textarea id="editHint" class="tall"></textarea></label>
+            <label class="field full"><span>적용 조건</span><textarea id="editAppliesWhen"></textarea></label>
+          </div>
+        </section>
+        <section class="editor-section">
+          <div class="editor-section-head">매칭 근거</div>
+          <div class="editor-grid">
+            <label class="field"><span>aliases</span><textarea id="editAliases"></textarea></label>
+            <label class="field"><span>match_fields</span><textarea id="editMatchFields"></textarea></label>
+            <label class="field"><span>활성</span><select id="editActive">
+              <option value="true">활성</option>
+              <option value="false">비활성</option>
+            </select></label>
+          </div>
+        </section>
+        <section class="editor-section">
+          <div class="editor-section-head">Taxonomy Target</div>
+          <div class="editor-grid target-grid">
+            <label class="field"><span>중직무</span><input id="editMajorJob" type="text"></label>
+            <label class="field"><span>소직무</span><input id="editSubJob" type="text"></label>
+            <label class="field"><span>Device</span><input id="editDevice" type="text"></label>
+            <label class="field"><span>단위 직무</span><input id="editUnitJob" type="text"></label>
+            <label class="field"><span>세부 직무1</span><input id="editDetailJob1" type="text"></label>
+            <label class="field"><span>세부 직무2</span><input id="editDetailJob2" type="text"></label>
+          </div>
+        </section>
         <div class="editor-actions">
-          <label><input id="editClearConflicts" type="checkbox"> 충돌 경고 해제</label>
+          <label class="field inline-check"><input id="editClearConflicts" type="checkbox"> 충돌 경고 해제</label>
           <div class="row-actions">
             <button id="refreshDetailBtn" type="button">새로고침</button>
             <button id="saveEditBtn" class="primary" type="submit">저장</button>
@@ -684,6 +785,7 @@ INDEX_HTML = """<!doctype html>
     const importBtn = document.querySelector("#importBtn");
     const fileEl = document.querySelector("#txtFile");
     const listEl = document.querySelector("#knowledgeList");
+    const listCountEl = document.querySelector("#listCount");
     const statusEl = document.querySelector("#status");
     const useLlmEl = document.querySelector("#useLlm");
     const searchInput = document.querySelector("#searchInput");
@@ -761,6 +863,16 @@ INDEX_HTML = """<!doctype html>
 
     const valueText = (items) => (items || []).join("\\n");
 
+    function showEditor() {
+      editorModal.hidden = false;
+      document.body.classList.add("modal-open");
+    }
+
+    function closeEditor() {
+      editorModal.hidden = true;
+      document.body.classList.remove("modal-open");
+    }
+
     async function requestJson(url, options = {}) {
       const response = await fetch(url, {
         headers: { "Content-Type": "application/json" },
@@ -807,6 +919,7 @@ INDEX_HTML = """<!doctype html>
 
     function renderEntries(items = knowledgeItems) {
       const displayItems = filterEntries(items);
+      listCountEl.textContent = `${displayItems.length} / ${items.length}개`;
       if (!displayItems.length) {
         listEl.innerHTML = '<div class="empty">저장된 지식이 없습니다.</div>';
         return;
@@ -936,7 +1049,7 @@ INDEX_HTML = """<!doctype html>
       setEditorEntry(payload.item);
       renderUsage(payload.usage);
       renderRevisions(payload.revisions);
-      editorModal.hidden = false;
+      showEditor();
     }
 
     function editorPayload() {
@@ -1077,11 +1190,16 @@ INDEX_HTML = """<!doctype html>
       element.addEventListener("change", () => renderEntries());
     });
     closeEditorBtn.addEventListener("click", () => {
-      editorModal.hidden = true;
+      closeEditor();
     });
     editorModal.addEventListener("click", (event) => {
       if (event.target === editorModal) {
-        editorModal.hidden = true;
+        closeEditor();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !editorModal.hidden) {
+        closeEditor();
       }
     });
     editorForm.addEventListener("submit", saveEditor);
@@ -1158,7 +1276,7 @@ INDEX_HTML = """<!doctype html>
           if (!confirm("이 지식을 삭제할까요?")) return;
           await requestJson(`/api/knowledge/${id}`, { method: "DELETE" });
           if (selectedEntryId === id) {
-            editorModal.hidden = true;
+            closeEditor();
             selectedEntryId = "";
           }
         }
