@@ -1,3 +1,4 @@
+import json
 import sqlite3
 
 from llm_categorizing.classifier import ClassificationConfig, OpenAICompatibleJobClassifier
@@ -48,6 +49,88 @@ def test_knowledge_store_retrieves_aliases_and_updates_version(tmp_path) -> None
     assert store.version_hash() != version_before
 
 
+def test_knowledge_store_populates_alias_index_and_revisions(tmp_path) -> None:
+    db_path = tmp_path / "knowledge.sqlite3"
+    store = JobKnowledgeStore(db_path)
+    entry = store.add(
+        "AlphaTask와 BetaReview가 함께 나오면 A 후보를 우선 검토",
+        KnowledgeDraft(
+            aliases=["AlphaTask", "BetaReview"],
+            match_fields=["self_review", "diagnosis_team"],
+            target_major_job="A",
+        ),
+    )
+    store.update_metadata(entry.id, enforcement_level="near_hard")
+
+    with store._connect() as connection:
+        connection.row_factory = sqlite3.Row
+        aliases = connection.execute(
+            """
+            SELECT alias_key, match_field
+            FROM knowledge_aliases
+            WHERE entry_id = ?
+            ORDER BY alias_key, match_field
+            """,
+            (entry.id,),
+        ).fetchall()
+        revisions = connection.execute(
+            """
+            SELECT action, snapshot_json
+            FROM knowledge_revisions
+            WHERE entry_id = ?
+            ORDER BY id
+            """,
+            (entry.id,),
+        ).fetchall()
+        busy_timeout = connection.execute("PRAGMA busy_timeout").fetchone()[0]
+        foreign_keys = connection.execute("PRAGMA foreign_keys").fetchone()[0]
+        journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
+
+    assert ("alphatask", "self_review") in {
+        (row["alias_key"], row["match_field"]) for row in aliases
+    }
+    assert ("betareview", "diagnosis_team") in {
+        (row["alias_key"], row["match_field"]) for row in aliases
+    }
+    assert [row["action"] for row in revisions] == ["create", "metadata_update"]
+    assert json.loads(revisions[-1]["snapshot_json"])["enforcement_level"] == "near_hard"
+    assert busy_timeout >= 30000
+    assert foreign_keys == 1
+    assert journal_mode == "wal"
+
+
+def test_knowledge_store_backfills_alias_index_for_existing_entries(tmp_path) -> None:
+    db_path = tmp_path / "knowledge.sqlite3"
+    store = JobKnowledgeStore(db_path)
+    entry = store.add(
+        "LegacyTask 지식",
+        KnowledgeDraft(aliases=["LegacyTask"], match_fields=["diagnosis_team"], target_major_job="A"),
+    )
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("DELETE FROM knowledge_aliases")
+        connection.execute("DELETE FROM knowledge_revisions")
+
+    migrated = JobKnowledgeStore(db_path)
+    retrieved = migrated.retrieve_for_context(
+        KnowledgeSearchContext(diagnosis_teams=("LegacyTask team",)),
+        limit=3,
+    )
+
+    with sqlite3.connect(db_path) as connection:
+        alias_count = connection.execute(
+            "SELECT COUNT(*) FROM knowledge_aliases WHERE entry_id = ?",
+            (entry.id,),
+        ).fetchone()[0]
+        revision_count = connection.execute(
+            "SELECT COUNT(*) FROM knowledge_revisions WHERE entry_id = ? AND action = 'initial_import'",
+            (entry.id,),
+        ).fetchone()[0]
+
+    assert alias_count == 1
+    assert revision_count == 1
+    assert [item.id for item in retrieved] == [entry.id]
+
+
 def test_knowledge_store_does_not_retrieve_from_target_value_only(tmp_path) -> None:
     store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
     store.add(
@@ -63,6 +146,44 @@ def test_knowledge_store_does_not_retrieve_from_target_value_only(tmp_path) -> N
     )
 
     retrieved = store.retrieve("NAND 수율 분석을 수행했지만 프로젝트 alias 언급은 없음", limit=3)
+
+    assert retrieved == []
+
+
+def test_knowledge_store_uses_fts_as_soft_fallback(tmp_path) -> None:
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "Colosseum 프로젝트는 NAND failure signature 분석 맥락에서 참고한다.",
+        KnowledgeDraft(
+            aliases=["UnusedAlias"],
+            match_fields=["diagnosis_team"],
+            hint="NAND failure signature 분석 맥락이면 참고한다.",
+            target_device="NAND",
+            priority=40,
+            confidence=0.6,
+        ),
+    )
+
+    retrieved = store.retrieve("NAND failure signature 분석 수행", limit=3)
+
+    assert retrieved
+    assert retrieved[0].id == entry.id
+    assert retrieved[0].match_score > 0
+
+
+def test_knowledge_store_does_not_use_fts_fallback_for_near_hard_rules(tmp_path) -> None:
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "Colosseum 프로젝트는 NAND failure signature 분석 맥락에서 참고한다.",
+        KnowledgeDraft(
+            aliases=["UnusedAlias"],
+            hint="NAND failure signature 분석 맥락이면 참고한다.",
+            target_device="NAND",
+        ),
+    )
+    store.update_metadata(entry.id, enforcement_level="near_hard")
+
+    retrieved = store.retrieve("NAND failure signature 분석 수행", limit=3)
 
     assert retrieved == []
 
@@ -186,6 +307,38 @@ def test_knowledge_store_can_retrieve_only_approved_entries(tmp_path) -> None:
 
     assert {item.id for item in usable} == {draft.id, approved.id}
     assert [item.id for item in approved_only] == [approved.id]
+
+
+def test_knowledge_store_exports_and_imports_approved_ndjson(tmp_path) -> None:
+    source_store = JobKnowledgeStore(tmp_path / "source.sqlite3")
+    draft = source_store.add(
+        "AlphaTask 초안 지식",
+        KnowledgeDraft(aliases=["AlphaTask"], hint="초안 지식"),
+    )
+    approved = source_store.add(
+        "BetaTask 검증 지식",
+        KnowledgeDraft(
+            knowledge_type="verified_rule",
+            aliases=["BetaTask"],
+            match_fields=["diagnosis_team"],
+            hint="검증 지식",
+            target_major_job="B",
+            priority=80,
+            confidence=0.8,
+        ),
+    )
+    export_path = tmp_path / "approved.ndjson"
+
+    count = source_store.export_ndjson(export_path)
+    imported = JobKnowledgeStore(tmp_path / "imported.sqlite3").import_ndjson(export_path)
+
+    assert count == 1
+    assert draft.raw_text not in export_path.read_text(encoding="utf-8")
+    assert len(imported) == 1
+    assert imported[0].raw_text == approved.raw_text
+    assert imported[0].review_status == "approved"
+    assert imported[0].enforcement_level == "strong"
+    assert imported[0].target_major_job == "B"
 
 
 def test_near_hard_enforcement_is_strongest_hint(tmp_path) -> None:

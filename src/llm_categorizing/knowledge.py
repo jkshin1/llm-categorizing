@@ -51,6 +51,23 @@ _ASCII_PHRASE_RE = re.compile(
     r"[0-9A-Za-z][0-9A-Za-z/_-]*(?:\s+[0-9A-Za-z][0-9A-Za-z/_-]*)+"
     r"(?![0-9A-Za-z])"
 )
+FTS_FALLBACK_STOP_TOKENS = {
+    "alias",
+    "device",
+    "project",
+    "프로젝트",
+    "프로젝트명",
+    "제품",
+    "후보",
+    "검토",
+    "분류",
+    "업무",
+    "직무",
+    "수행",
+    "분석",
+    "의미",
+    "의미한다",
+}
 
 KNOWLEDGE_NORMALIZATION_SYSTEM_PROMPT = """너는 사내 직무 분류 지식을 정리하는 데이터 관리자다.
 사용자가 입력한 자연어 지식을 직무 분류기가 참고할 수 있는 구조화 JSON으로 바꾼다.
@@ -664,8 +681,12 @@ class JobKnowledgeStore:
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path)
+        connection = sqlite3.connect(self.path, timeout=30.0)
         connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("PRAGMA busy_timeout = 30000")
+        connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute("PRAGMA synchronous = NORMAL")
         return connection
 
     def _init_db(self) -> None:
@@ -712,6 +733,62 @@ class JobKnowledgeStore:
                 ON knowledge_entries(active, review_status, priority)
                 """
             )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS knowledge_aliases (
+                    entry_id TEXT NOT NULL,
+                    alias TEXT NOT NULL,
+                    alias_key TEXT NOT NULL,
+                    alias_compact TEXT NOT NULL,
+                    match_field TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (entry_id, alias_key, match_field),
+                    FOREIGN KEY (entry_id) REFERENCES knowledge_entries(id) ON DELETE CASCADE
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_knowledge_aliases_alias_key
+                ON knowledge_aliases(alias_key, match_field, entry_id)
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_knowledge_aliases_alias_compact
+                ON knowledge_aliases(alias_compact, match_field, entry_id)
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_knowledge_aliases_entry_id
+                ON knowledge_aliases(entry_id)
+                """
+            )
+            connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS knowledge_revisions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    entry_id TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_knowledge_revisions_entry_id
+                ON knowledge_revisions(entry_id, created_at)
+                """
+            )
+            connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_knowledge_revisions_action
+                ON knowledge_revisions(action, created_at)
+                """
+            )
+            self._ensure_fts_table(connection)
             self._ensure_column(
                 connection,
                 "knowledge_entries",
@@ -771,6 +848,8 @@ class JobKnowledgeStore:
                 ON knowledge_usage(knowledge_id, created_at)
                 """
             )
+            self._rebuild_derived_indexes(connection)
+            self._backfill_initial_revisions(connection)
 
     def _ensure_column(
         self,
@@ -786,6 +865,128 @@ class JobKnowledgeStore:
         if column_name in existing:
             return
         connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
+
+    def _ensure_fts_table(self, connection: sqlite3.Connection) -> bool:
+        try:
+            connection.execute(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_entries_fts
+                USING fts5(entry_id UNINDEXED, raw_text, title, hint, applies_when)
+                """
+            )
+        except sqlite3.OperationalError:
+            return False
+        return True
+
+    def _fts_table_exists(self, connection: sqlite3.Connection) -> bool:
+        row = connection.execute(
+            """
+            SELECT 1
+            FROM sqlite_master
+            WHERE type = 'table' AND name = 'knowledge_entries_fts'
+            """
+        ).fetchone()
+        return row is not None
+
+    def _rebuild_derived_indexes(self, connection: sqlite3.Connection) -> None:
+        rows = connection.execute("SELECT * FROM knowledge_entries").fetchall()
+        if not rows:
+            return
+        connection.execute("DELETE FROM knowledge_aliases")
+        if self._fts_table_exists(connection):
+            connection.execute("DELETE FROM knowledge_entries_fts")
+        for row in rows:
+            self._sync_entry_indexes(connection, JobKnowledge.from_row(row))
+
+    def _backfill_initial_revisions(self, connection: sqlite3.Connection) -> None:
+        rows = connection.execute("SELECT * FROM knowledge_entries").fetchall()
+        for row in rows:
+            knowledge = JobKnowledge.from_row(row)
+            existing = connection.execute(
+                "SELECT 1 FROM knowledge_revisions WHERE entry_id = ? LIMIT 1",
+                (knowledge.id,),
+            ).fetchone()
+            if existing:
+                continue
+            self._record_revision(connection, knowledge, "initial_import", created_at=knowledge.updated_at)
+
+    def _sync_entry_indexes(self, connection: sqlite3.Connection, knowledge: JobKnowledge) -> None:
+        self._sync_aliases(connection, knowledge)
+        self._sync_fts(connection, knowledge)
+
+    def _sync_aliases(self, connection: sqlite3.Connection, knowledge: JobKnowledge) -> None:
+        connection.execute("DELETE FROM knowledge_aliases WHERE entry_id = ?", (knowledge.id,))
+        now = _utc_now()
+        fields = list(knowledge.match_fields) or [""]
+        rows = []
+        seen: set[tuple[str, str]] = set()
+        for alias in knowledge.aliases:
+            alias_text = normalize_cell(alias)
+            alias_key = normalize_key(alias_text)
+            alias_compact = compact_knowledge_key(alias_text)
+            if not alias_text or not alias_key:
+                continue
+            for field in fields:
+                match_field = normalize_cell(field).casefold()
+                key = (alias_key, match_field)
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append((knowledge.id, alias_text, alias_key, alias_compact, match_field, now))
+        if not rows:
+            return
+        connection.executemany(
+            """
+            INSERT OR IGNORE INTO knowledge_aliases (
+                entry_id, alias, alias_key, alias_compact, match_field, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+
+    def _sync_fts(self, connection: sqlite3.Connection, knowledge: JobKnowledge) -> None:
+        if not self._fts_table_exists(connection):
+            return
+        connection.execute(
+            "DELETE FROM knowledge_entries_fts WHERE entry_id = ?",
+            (knowledge.id,),
+        )
+        connection.execute(
+            """
+            INSERT INTO knowledge_entries_fts (
+                entry_id, raw_text, title, hint, applies_when
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                knowledge.id,
+                knowledge.raw_text,
+                knowledge.title,
+                knowledge.hint,
+                knowledge.applies_when,
+            ),
+        )
+
+    def _record_revision(
+        self,
+        connection: sqlite3.Connection,
+        knowledge: JobKnowledge,
+        action: str,
+        *,
+        created_at: str | None = None,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO knowledge_revisions (
+                entry_id, action, snapshot_json, created_at
+            ) VALUES (?, ?, ?, ?)
+            """,
+            (
+                knowledge.id,
+                action,
+                json.dumps(_knowledge_revision_snapshot(knowledge), ensure_ascii=False, sort_keys=True),
+                created_at or _utc_now(),
+            ),
+        )
 
     def add(self, raw_text: str, draft: KnowledgeDraft, *, source: str = "user") -> JobKnowledge:
         clean_raw_text = normalize_cell(raw_text)
@@ -865,7 +1066,10 @@ class JobKnowledgeStore:
                 "SELECT * FROM knowledge_entries WHERE id = ?",
                 (entry_id,),
             ).fetchone()
-        return JobKnowledge.from_row(row)
+            knowledge = JobKnowledge.from_row(row)
+            self._sync_entry_indexes(connection, knowledge)
+            self._record_revision(connection, knowledge, "create", created_at=now)
+        return knowledge
 
     def find_conflicts(
         self,
@@ -885,18 +1089,28 @@ class JobKnowledgeStore:
 
         conflicts: list[dict[str, Any]] = []
         with self._connect() as connection:
+            placeholders = ",".join("?" for _ in alias_keys)
+            values: list[object] = list(alias_keys)
+            exclude_sql = ""
+            if exclude_id:
+                exclude_sql = "AND e.id != ?"
+                values.append(exclude_id)
             rows = connection.execute(
-                """
-                SELECT * FROM knowledge_entries
-                WHERE active = 1 AND review_status != 'rejected'
-                ORDER BY review_status DESC, priority DESC, created_at DESC
-                """
+                f"""
+                SELECT DISTINCT e.*
+                FROM knowledge_entries e
+                JOIN knowledge_aliases a ON a.entry_id = e.id
+                WHERE e.active = 1
+                  AND e.review_status != 'rejected'
+                  AND a.alias_key IN ({placeholders})
+                  {exclude_sql}
+                ORDER BY e.review_status DESC, e.priority DESC, e.created_at DESC
+                """,
+                values,
             ).fetchall()
 
         for row in rows:
             existing = JobKnowledge.from_row(row)
-            if exclude_id and existing.id == exclude_id:
-                continue
             shared_aliases = _shared_aliases(alias_keys, existing.aliases)
             if not shared_aliases:
                 continue
@@ -1041,7 +1255,10 @@ class JobKnowledgeStore:
             "SELECT * FROM knowledge_entries WHERE id = ?",
             (existing.id,),
         ).fetchone()
-        return JobKnowledge.from_row(updated)
+        knowledge = JobKnowledge.from_row(updated)
+        self._sync_entry_indexes(connection, knowledge)
+        self._record_revision(connection, knowledge, "merge_duplicate", created_at=now)
+        return knowledge
 
     def list_recent(self, *, limit: int = 50, include_inactive: bool = True) -> list[JobKnowledge]:
         where = "" if include_inactive else "WHERE active = 1"
@@ -1056,6 +1273,104 @@ class JobKnowledgeStore:
                 (limit,),
             ).fetchall()
         return [JobKnowledge.from_row(row) for row in rows]
+
+    def export_ndjson(
+        self,
+        path: str | Path,
+        *,
+        review_scope: str = "approved",
+    ) -> int:
+        if review_scope not in {"approved", "usable", "all"}:
+            raise ValueError("review_scope must be one of: approved, usable, all")
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        where = "WHERE active = 1 AND review_status = 'approved'"
+        if review_scope == "usable":
+            where = "WHERE active = 1 AND review_status != 'rejected'"
+        elif review_scope == "all":
+            where = ""
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM knowledge_entries
+                {where}
+                ORDER BY id
+                """
+            ).fetchall()
+
+        count = 0
+        with path.open("w", encoding="utf-8") as handle:
+            for row in rows:
+                knowledge = JobKnowledge.from_row(row)
+                handle.write(
+                    json.dumps(_knowledge_export_payload(knowledge), ensure_ascii=False, sort_keys=True)
+                )
+                handle.write("\n")
+                count += 1
+        return count
+
+    def import_ndjson(
+        self,
+        path: str | Path,
+        *,
+        source: str = "ndjson_import",
+    ) -> list[JobKnowledge]:
+        imported: list[JobKnowledge] = []
+        with Path(path).open("r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                text = line.strip()
+                if not text:
+                    continue
+                try:
+                    payload = json.loads(text)
+                except json.JSONDecodeError as exc:
+                    raise ValueError(f"invalid NDJSON at line {line_number}: {exc}") from exc
+                if not isinstance(payload, dict):
+                    raise ValueError(f"invalid NDJSON at line {line_number}: expected object")
+
+                raw_text = normalize_cell(payload.get("raw_text", ""))
+                if not raw_text:
+                    raise ValueError(f"invalid NDJSON at line {line_number}: raw_text is required")
+                draft = KnowledgeDraft(
+                    knowledge_type=payload.get("knowledge_type", "soft_hint"),
+                    title=payload.get("title", ""),
+                    aliases=payload.get("aliases", []),
+                    match_fields=payload.get("match_fields", []),
+                    applies_when=payload.get("applies_when", ""),
+                    hint=payload.get("hint", ""),
+                    target_major_job=payload.get("target_major_job", ""),
+                    target_sub_job=payload.get("target_sub_job", ""),
+                    target_device=payload.get("target_device", ""),
+                    target_unit_job=payload.get("target_unit_job", ""),
+                    target_detail_job_1=payload.get("target_detail_job_1", ""),
+                    target_detail_job_2=payload.get("target_detail_job_2", ""),
+                    priority=payload.get("priority", 50),
+                    confidence=payload.get("confidence", 0.5),
+                    validation_errors=payload.get("validation_errors", []),
+                ).with_fallbacks(raw_text)
+                entry = self.add(raw_text, draft, source=source)
+                review_status = normalize_cell(payload.get("review_status", "")).casefold()
+                enforcement_level = normalize_cell(payload.get("enforcement_level", "")).casefold()
+                knowledge_type = normalize_cell(payload.get("knowledge_type", "")).casefold()
+                if (
+                    review_status in SUPPORTED_REVIEW_STATUSES
+                    or enforcement_level in SUPPORTED_ENFORCEMENT_LEVELS
+                    or knowledge_type in SUPPORTED_KNOWLEDGE_TYPES
+                ):
+                    updated = self.update_metadata(
+                        entry.id,
+                        knowledge_type=knowledge_type if knowledge_type in SUPPORTED_KNOWLEDGE_TYPES else None,
+                        review_status=review_status if review_status in SUPPORTED_REVIEW_STATUSES else None,
+                        enforcement_level=(
+                            enforcement_level if enforcement_level in SUPPORTED_ENFORCEMENT_LEVELS else None
+                        ),
+                    )
+                    if updated is not None:
+                        entry = updated
+                imported.append(entry)
+        return imported
 
     def set_active(self, entry_id: str, active: bool) -> JobKnowledge | None:
         now = _utc_now()
@@ -1072,7 +1387,12 @@ class JobKnowledgeStore:
                 "SELECT * FROM knowledge_entries WHERE id = ?",
                 (entry_id,),
             ).fetchone()
-        return JobKnowledge.from_row(row) if row else None
+            if not row:
+                return None
+            knowledge = JobKnowledge.from_row(row)
+            self._sync_entry_indexes(connection, knowledge)
+            self._record_revision(connection, knowledge, "set_active", created_at=now)
+        return knowledge
 
     def update_metadata(
         self,
@@ -1157,10 +1477,28 @@ class JobKnowledgeStore:
                 "SELECT * FROM knowledge_entries WHERE id = ?",
                 (entry_id,),
             ).fetchone()
-        return JobKnowledge.from_row(row) if row else None
+            if not row:
+                return None
+            knowledge = JobKnowledge.from_row(row)
+            self._sync_entry_indexes(connection, knowledge)
+            self._record_revision(connection, knowledge, "metadata_update")
+        return knowledge
 
     def delete(self, entry_id: str) -> bool:
         with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM knowledge_entries WHERE id = ?",
+                (entry_id,),
+            ).fetchone()
+            if not row:
+                return False
+            knowledge = JobKnowledge.from_row(row)
+            self._record_revision(connection, knowledge, "delete")
+            if self._fts_table_exists(connection):
+                connection.execute(
+                    "DELETE FROM knowledge_entries_fts WHERE entry_id = ?",
+                    (entry_id,),
+                )
             cursor = connection.execute("DELETE FROM knowledge_entries WHERE id = ?", (entry_id,))
         return cursor.rowcount > 0
 
@@ -1235,17 +1573,43 @@ class JobKnowledgeStore:
 
         with self._connect() as connection:
             status_filter = "AND review_status = 'approved'" if review_scope == "approved" else "AND review_status != 'rejected'"
-            rows = connection.execute(
-                f"""
-                SELECT * FROM knowledge_entries
-                WHERE active = 1 {status_filter}
-                ORDER BY priority DESC, created_at DESC
-                """
-            ).fetchall()
+            alias_candidate_ids = self._candidate_entry_ids_from_aliases(
+                connection,
+                documents,
+                review_scope=review_scope,
+            )
+            fts_candidate_ids = self._candidate_entry_ids_from_fts(
+                connection,
+                documents,
+                review_scope=review_scope,
+            )
+            candidate_ids = alias_candidate_ids | fts_candidate_ids
+            if candidate_ids:
+                placeholders = ",".join("?" for _ in candidate_ids)
+                rows = connection.execute(
+                    f"""
+                    SELECT *
+                    FROM knowledge_entries
+                    WHERE active = 1 {status_filter}
+                      AND id IN ({placeholders})
+                    ORDER BY priority DESC, created_at DESC
+                    """,
+                    list(candidate_ids),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    f"""
+                    SELECT * FROM knowledge_entries
+                    WHERE active = 1 {status_filter}
+                    ORDER BY priority DESC, created_at DESC
+                    """
+                ).fetchall()
 
         for row in rows:
             knowledge = JobKnowledge.from_row(row)
             score = self._match_score(knowledge, documents)
+            if score <= 0 and knowledge.id in fts_candidate_ids and knowledge.id not in alias_candidate_ids:
+                score = self._fts_fallback_match_score(knowledge, documents)
             if score <= 0:
                 continue
             scored.append((score, JobKnowledge.from_row(row, match_score=score)))
@@ -1261,6 +1625,82 @@ class JobKnowledgeStore:
             reverse=True,
         )
         return [knowledge for _, knowledge in scored[:limit]]
+
+    def _candidate_entry_ids_from_aliases(
+        self,
+        connection: sqlite3.Connection,
+        documents: list[_SearchDocument],
+        *,
+        review_scope: str,
+    ) -> set[str]:
+        status_filter = "AND e.review_status = 'approved'" if review_scope == "approved" else "AND e.review_status != 'rejected'"
+        entry_ids: set[str] = set()
+        for document in documents:
+            token_values = sorted(document.tokens)
+            if token_values:
+                placeholders = ",".join("?" for _ in token_values)
+                rows = connection.execute(
+                    f"""
+                    SELECT DISTINCT a.entry_id
+                    FROM knowledge_aliases a
+                    JOIN knowledge_entries e ON e.id = a.entry_id
+                    WHERE e.active = 1 {status_filter}
+                      AND length(a.alias_compact) < 3
+                      AND a.alias_key IN ({placeholders})
+                    """,
+                    token_values,
+                ).fetchall()
+                entry_ids.update(normalize_cell(row["entry_id"]) for row in rows)
+
+            rows = connection.execute(
+                f"""
+                SELECT DISTINCT a.entry_id
+                FROM knowledge_aliases a
+                JOIN knowledge_entries e ON e.id = a.entry_id
+                WHERE e.active = 1 {status_filter}
+                  AND length(a.alias_compact) >= 3
+                  AND (
+                    ? LIKE '%' || a.alias_key || '%'
+                    OR ? LIKE '%' || a.alias_compact || '%'
+                  )
+                """,
+                (document.key, document.compact),
+            ).fetchall()
+            entry_ids.update(normalize_cell(row["entry_id"]) for row in rows)
+        return {entry_id for entry_id in entry_ids if entry_id}
+
+    def _candidate_entry_ids_from_fts(
+        self,
+        connection: sqlite3.Connection,
+        documents: list[_SearchDocument],
+        *,
+        review_scope: str,
+    ) -> set[str]:
+        if not self._fts_table_exists(connection):
+            return set()
+        query = _fts_query_for_documents(documents)
+        if not query:
+            return set()
+        status_filter = "AND e.review_status = 'approved'" if review_scope == "approved" else "AND e.review_status != 'rejected'"
+        try:
+            rows = connection.execute(
+                f"""
+                SELECT DISTINCT knowledge_entries_fts.entry_id
+                FROM knowledge_entries_fts
+                JOIN knowledge_entries e ON e.id = knowledge_entries_fts.entry_id
+                WHERE e.active = 1 {status_filter}
+                  AND knowledge_entries_fts MATCH ?
+                LIMIT 200
+                """,
+                (query,),
+            ).fetchall()
+        except sqlite3.OperationalError:
+            return set()
+        return {
+            normalize_cell(row["entry_id"])
+            for row in rows
+            if normalize_cell(row["entry_id"])
+        }
 
     def version_hash(self) -> str:
         with self._connect() as connection:
@@ -1305,6 +1745,54 @@ class JobKnowledgeStore:
                 score += 2.0
             if knowledge.conflicts and knowledge.review_status != "approved":
                 score *= 0.55
+        return score
+
+    def _fts_fallback_match_score(
+        self,
+        knowledge: JobKnowledge,
+        documents: list[_SearchDocument],
+    ) -> float:
+        if knowledge.enforcement_level == "near_hard":
+            return 0.0
+        knowledge_words = knowledge_tokens(
+            " ".join(
+                [
+                    knowledge.raw_text,
+                    knowledge.title,
+                    knowledge.hint,
+                    knowledge.applies_when,
+                ]
+            )
+        )
+        target_words = knowledge_tokens(
+            " ".join(
+                [
+                    knowledge.target_major_job,
+                    knowledge.target_sub_job,
+                    knowledge.target_device,
+                    knowledge.target_unit_job,
+                    knowledge.target_detail_job_1,
+                    knowledge.target_detail_job_2,
+                ]
+            )
+        )
+        fallback_words = knowledge_words - target_words - FTS_FALLBACK_STOP_TOKENS
+        if not fallback_words:
+            return 0.0
+        best_overlap = 0.0
+        for document in documents:
+            document_tokens = document.tokens - target_words - FTS_FALLBACK_STOP_TOKENS
+            overlap = len(document_tokens.intersection(fallback_words))
+            if overlap < 2:
+                continue
+            best_overlap = max(best_overlap, min(4.0, overlap * 0.75) * document.weight)
+        if best_overlap <= 0:
+            return 0.0
+        score = best_overlap + knowledge.confidence * 0.5
+        if knowledge.review_status == "approved":
+            score += 0.5
+        if knowledge.enforcement_level == "strong":
+            score += 0.5
         return score
 
     def _document_match_score(
@@ -1636,6 +2124,35 @@ def conflict_validation_errors(conflicts: list[dict[str, Any]]) -> list[str]:
     if len(conflicts) > 5:
         errors.append(f"potential conflicts omitted: {len(conflicts) - 5}")
     return errors
+
+
+def _knowledge_export_payload(knowledge: JobKnowledge) -> dict[str, Any]:
+    payload = knowledge.to_api_dict()
+    payload.pop("match_score", None)
+    return payload
+
+
+def _knowledge_revision_snapshot(knowledge: JobKnowledge) -> dict[str, Any]:
+    return _knowledge_export_payload(knowledge)
+
+
+def _fts_query_for_documents(documents: list[_SearchDocument]) -> str:
+    tokens: list[str] = []
+    seen: set[str] = set()
+    for document in documents:
+        for token in sorted(document.tokens):
+            if len(compact_knowledge_key(token)) < 2:
+                continue
+            key = normalize_key(token)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            tokens.append(key)
+            if len(tokens) >= 20:
+                break
+        if len(tokens) >= 20:
+            break
+    return " OR ".join(f'"{token.replace(chr(34), chr(34) + chr(34))}"' for token in tokens)
 
 
 def _shared_aliases(alias_keys: set[str], aliases: tuple[str, ...]) -> list[str]:
