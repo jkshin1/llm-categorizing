@@ -293,7 +293,7 @@ class OpenAICompatibleJobClassifier:
                 pair_candidates = stage1_override_candidates
                 applied_stage1_override = True
                 applied_priority_reasons.append(
-                    f"{pair_priority_reason}; 준하드룰 지식이 과거 diagnosis 직무명 보정으로 stage1 후보를 대체"
+                    f"{pair_priority_reason}; 준하드룰 지식이 과거 diagnosis 직무명/team 보정으로 stage1 후보를 대체"
                 )
                 knowledge_priority_reasons.append(stage1_override_reason)
             else:
@@ -558,7 +558,7 @@ class OpenAICompatibleJobClassifier:
         knowledge_items: list[JobKnowledge],
         context_json: str = "",
     ) -> KnowledgeHardPriority:
-        context_year, diagnosis_job_names = self._diagnosis_override_context(context_json)
+        context_year, diagnosis_job_names, diagnosis_teams = self._diagnosis_override_context(context_json)
         rows: list[dict[str, str]] = []
         reasons: list[str] = []
         stage1_override_rows: list[dict[str, str]] = []
@@ -583,6 +583,7 @@ class OpenAICompatibleJobClassifier:
             is_stage1_override = self._is_diagnosis_job_name_stage1_override(
                 item,
                 diagnosis_job_names=diagnosis_job_names,
+                diagnosis_teams=diagnosis_teams,
                 context_year=context_year,
             )
             for row in matched_rows:
@@ -601,7 +602,7 @@ class OpenAICompatibleJobClassifier:
             )
             if is_stage1_override:
                 stage1_override_reasons.append(
-                    f"준하드룰 지식[{item.id}] '{item.title}' diagnosis 직무명 보정으로 stage1 후보 제한"
+                    f"준하드룰 지식[{item.id}] '{item.title}' diagnosis 직무명/team 보정으로 stage1 후보 제한"
                 )
         return KnowledgeHardPriority(
             rows=tuple(rows),
@@ -615,31 +616,44 @@ class OpenAICompatibleJobClassifier:
         item: JobKnowledge,
         *,
         diagnosis_job_names: list[str],
+        diagnosis_teams: list[str],
         context_year: str,
     ) -> bool:
         return (
-            "diagnosis_job_name" in item.match_fields
-            and bool(normalize_cell(item.target_major_job))
+            bool(normalize_cell(item.target_major_job))
             and bool(normalize_cell(item.target_sub_job))
-            and self._knowledge_alias_matches_values(item, diagnosis_job_names)
+            and (
+                (
+                    "diagnosis_job_name" in item.match_fields
+                    and self._knowledge_alias_matches_values(item, diagnosis_job_names)
+                )
+                or (
+                    "diagnosis_team" in item.match_fields
+                    and self._knowledge_alias_matches_team(item, diagnosis_teams)
+                )
+            )
             and self._knowledge_year_allows(item, context_year)
         )
 
-    def _diagnosis_override_context(self, context_json: str) -> tuple[str, list[str]]:
+    def _diagnosis_override_context(self, context_json: str) -> tuple[str, list[str], list[str]]:
         try:
             context = json.loads(context_json) if context_json else {}
         except json.JSONDecodeError:
-            return "", []
+            return "", [], []
         if not isinstance(context, dict):
-            return "", []
+            return "", [], []
         diagnosis_context = context.get("diagnosis_context")
         if not isinstance(diagnosis_context, dict):
             diagnosis_context = {}
         raw_job_names = diagnosis_context.get("diagnosis_job_names", [])
         if not isinstance(raw_job_names, list):
             raw_job_names = []
+        raw_teams = diagnosis_context.get("diagnosis_teams", [])
+        if not isinstance(raw_teams, list):
+            raw_teams = []
         job_names = [normalize_cell(value) for value in raw_job_names if normalize_cell(value)]
-        return normalize_cell(context.get("year", "")), job_names
+        teams = [normalize_cell(value) for value in raw_teams if normalize_cell(value)]
+        return normalize_cell(context.get("year", "")), job_names, teams
 
     def _knowledge_alias_matches_values(self, item: JobKnowledge, values: list[str]) -> bool:
         if not values:
@@ -647,6 +661,15 @@ class OpenAICompatibleJobClassifier:
         for alias in item.aliases:
             for value in values:
                 if _diagnosis_job_name_alias_matches(alias, value):
+                    return True
+        return False
+
+    def _knowledge_alias_matches_team(self, item: JobKnowledge, teams: list[str]) -> bool:
+        if not teams:
+            return False
+        for alias in item.aliases:
+            for team in teams:
+                if _diagnosis_team_alias_matches(alias, team):
                     return True
         return False
 
@@ -1255,7 +1278,7 @@ class OpenAICompatibleJobClassifier:
             "confidence_review_threshold": self.config.confidence_review_threshold,
             "previous_year_min_current_review_chars": self.config.previous_year_min_current_review_chars,
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
-            "near_hard_knowledge_policy": "diagnosis_job_name_stage1_override_exact_v5",
+            "near_hard_knowledge_policy": "diagnosis_input_stage1_override_team_v6",
             "previous_year_prompt_policy": "fallback_only_when_current_review_short_v1",
             "self_review_pair_priority_policy": "taxonomy_major_sub_signal_match_v2",
             "stage2_pair_recovery_policy": "reason_major_sub_match_v2",
@@ -1394,6 +1417,28 @@ def _diagnosis_job_name_alias_matches(alias: object, diagnosis_job_name: object)
         if base and alias_compact == base:
             return True
     return False
+
+
+def _diagnosis_team_alias_matches(alias: object, diagnosis_team: object) -> bool:
+    if _is_hard_diagnosis_match(_text_match_score(alias, diagnosis_team)):
+        return True
+
+    alias_tokens = _match_tokens(alias)
+    team_tokens = _match_tokens(diagnosis_team)
+    if not alias_tokens or not team_tokens:
+        return False
+    if len(alias_tokens) == 1:
+        token = alias_tokens[0]
+        return len(token) >= 3 and token in team_tokens
+    return all(token in team_tokens for token in alias_tokens)
+
+
+def _match_tokens(value: object) -> list[str]:
+    return [
+        token
+        for token in re.findall(r"[0-9A-Za-z가-힣]+", normalize_cell(value).casefold())
+        if token
+    ]
 
 
 def _is_hard_diagnosis_match(score: int) -> bool:
