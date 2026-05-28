@@ -343,7 +343,7 @@ def test_near_hard_diagnosis_job_name_mapping_overrides_legacy_diagnosis_pair(tm
         "2021~2024년 진단 시 직무명 Photo공정은 OPC 단서가 있으면 현재 DIC > OPC로 보정한다.",
         KnowledgeDraft(
             title="Photo공정 과거 OPC 매핑",
-            aliases=["Photo공정", "OPC", "CROPC", "MASK"],
+            aliases=["Photo", "OPC", "CROPC", "MASK"],
             match_fields=["diagnosis_job_name", "self_review"],
             hint="2021~2024년 Photo공정 진단명과 OPC 업무 단서가 함께 있으면 DIC > OPC 후보를 우선한다.",
             target_major_job="DIC",

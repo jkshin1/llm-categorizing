@@ -646,7 +646,7 @@ class OpenAICompatibleJobClassifier:
             return False
         for alias in item.aliases:
             for value in values:
-                if _is_hard_diagnosis_match(_text_match_score(alias, value)):
+                if _diagnosis_job_name_alias_matches(alias, value):
                     return True
         return False
 
@@ -1255,7 +1255,7 @@ class OpenAICompatibleJobClassifier:
             "confidence_review_threshold": self.config.confidence_review_threshold,
             "previous_year_min_current_review_chars": self.config.previous_year_min_current_review_chars,
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
-            "near_hard_knowledge_policy": "diagnosis_job_name_stage1_override_exact_v4",
+            "near_hard_knowledge_policy": "diagnosis_job_name_stage1_override_exact_v5",
             "previous_year_prompt_policy": "fallback_only_when_current_review_short_v1",
             "self_review_pair_priority_policy": "taxonomy_major_sub_signal_match_v2",
             "stage2_pair_recovery_policy": "reason_major_sub_match_v2",
@@ -1374,6 +1374,26 @@ def _text_match_score(target: object, source: object) -> int:
     if len(source_compact) >= 2 and source_compact in target_compact:
         return 600 + len(source_compact)
     return 0
+
+
+def _diagnosis_job_name_alias_matches(alias: object, diagnosis_job_name: object) -> bool:
+    if _is_hard_diagnosis_match(_text_match_score(alias, diagnosis_job_name)):
+        return True
+
+    alias_compact = _compact_text(alias)
+    job_compact = _compact_text(diagnosis_job_name)
+    if not alias_compact or not job_compact:
+        return False
+
+    generic_suffixes = ("공정", "직무", "업무", "기술")
+    for suffix in generic_suffixes:
+        suffix_compact = _compact_text(suffix)
+        if not suffix_compact or not job_compact.endswith(suffix_compact):
+            continue
+        base = job_compact[: -len(suffix_compact)]
+        if base and alias_compact == base:
+            return True
+    return False
 
 
 def _is_hard_diagnosis_match(score: int) -> bool:
