@@ -499,6 +499,98 @@ def test_near_hard_diagnosis_team_mapping_overrides_legacy_diagnosis_pair(tmp_pa
     assert "diagnosis 직무명/team 보정으로 stage1 후보 제한" in result["knowledge_priority_reason"]
 
 
+def test_near_hard_diagnosis_team_mapping_does_not_override_current_dic_sub_job(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "DIC",
+                "소직무": "SPICE Modeling",
+                "Device": "공통",
+                "단위 직무": "SPICE Modeling",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "DIC",
+                "소직무": "OPC",
+                "Device": "공통",
+                "단위 직무": "OPC Infra",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "2021~2024년 diagnosis team에 DRAM OPC 또는 OPC가 포함되면 현재 DIC > OPC 업무로 보정한다.",
+        KnowledgeDraft(
+            title="DRAM OPC team 과거 OPC 매핑",
+            aliases=["OPC", "DRAM OPC"],
+            match_fields=["diagnosis_team"],
+            hint="diagnosis team이 DRAM OPC이면 DIC > OPC 후보를 우선한다.",
+            target_major_job="DIC",
+            target_sub_job="OPC",
+        ),
+    )
+    store.update_metadata(entry.id, enforcement_level="near_hard")
+    classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(),
+        knowledge_store=store,
+    )
+    diagnosis_context = DiagnosisContext(
+        year="2022",
+        emp_num="E0007",
+        row_count=1,
+        teams=["DRAM OPC"],
+        job_names=["SPICE Modeling"],
+        categories=[],
+        evidence_rows=[],
+    )
+
+    def fail_stage1(self, context_json, candidate_pairs=None):
+        raise AssertionError("diagnosis job name should keep the SPICE Modeling pair before stage1")
+
+    def fixed_stage2(self, context_json, candidates):
+        assert candidates == [taxonomy.rows[0]]
+        return FinalClassificationResult(
+            major_job="DIC",
+            sub_job="SPICE Modeling",
+            device="공통",
+            unit_job="SPICE Modeling",
+            detail_job_1="",
+            detail_job_2="",
+            confidence=0.92,
+            needs_review=False,
+            reason="진단 직무명과 self_review 모두 SPICE Modeling 근거",
+        )
+
+    classifier._run_stage1 = MethodType(fail_stage1, classifier)
+    classifier._run_stage2 = MethodType(fixed_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2022",
+            "team": "",
+            "emp_num": "E0007",
+            "name": "홍길동",
+            "self_review": "SPICE Modeling 기반 회로 최적화 및 모델 검증",
+        },
+        diagnosis_context=diagnosis_context,
+    )
+
+    assert result["중직무"] == "DIC"
+    assert result["소직무"] == "SPICE Modeling"
+    assert "diagnosis 우선 적용" in result["diagnosis_priority_reason"]
+    assert "준하드룰 지식이 과거 diagnosis 직무명/team 보정" not in result["diagnosis_priority_reason"]
+    assert "diagnosis 직무명 우선 적용" in result["knowledge_priority_reason"]
+
+
 def test_near_hard_legacy_mapping_requires_matching_diagnosis_job_name(tmp_path) -> None:
     taxonomy = Taxonomy.from_rows(
         [

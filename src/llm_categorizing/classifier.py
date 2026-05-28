@@ -277,7 +277,11 @@ class OpenAICompatibleJobClassifier:
         knowledge_items: list[JobKnowledge],
     ) -> dict[str, Any]:
         applied_priority_reasons: list[str] = []
-        knowledge_priority = self._near_hard_knowledge_priority(knowledge_items, context_json)
+        knowledge_priority = self._near_hard_knowledge_priority(
+            knowledge_items,
+            context_json,
+            diagnosis_priority=diagnosis_priority,
+        )
         knowledge_priority_reasons = list(knowledge_priority.reasons)
         stage1_override_candidates, stage1_override_reason = self._knowledge_stage1_override_candidates(
             knowledge_priority
@@ -557,6 +561,7 @@ class OpenAICompatibleJobClassifier:
         self,
         knowledge_items: list[JobKnowledge],
         context_json: str = "",
+        diagnosis_priority: DiagnosisPriority | None = None,
     ) -> KnowledgeHardPriority:
         context_year, diagnosis_job_names, diagnosis_teams = self._diagnosis_override_context(context_json)
         rows: list[dict[str, str]] = []
@@ -585,6 +590,7 @@ class OpenAICompatibleJobClassifier:
                 diagnosis_job_names=diagnosis_job_names,
                 diagnosis_teams=diagnosis_teams,
                 context_year=context_year,
+                diagnosis_priority=diagnosis_priority,
             )
             for row in matched_rows:
                 key = tuple(normalize_cell(row.get(column, "")).casefold() for column in TAXONOMY_COLUMNS)
@@ -618,22 +624,43 @@ class OpenAICompatibleJobClassifier:
         diagnosis_job_names: list[str],
         diagnosis_teams: list[str],
         context_year: str,
+        diagnosis_priority: DiagnosisPriority | None = None,
     ) -> bool:
+        job_name_match = (
+            "diagnosis_job_name" in item.match_fields
+            and self._knowledge_alias_matches_values(item, diagnosis_job_names)
+        )
+        team_match = (
+            "diagnosis_team" in item.match_fields
+            and self._knowledge_alias_matches_team(item, diagnosis_teams)
+        )
+        if (
+            team_match
+            and not job_name_match
+            and self._team_override_conflicts_with_current_diagnosis(item, diagnosis_priority)
+        ):
+            return False
         return (
             bool(normalize_cell(item.target_major_job))
             and bool(normalize_cell(item.target_sub_job))
-            and (
-                (
-                    "diagnosis_job_name" in item.match_fields
-                    and self._knowledge_alias_matches_values(item, diagnosis_job_names)
-                )
-                or (
-                    "diagnosis_team" in item.match_fields
-                    and self._knowledge_alias_matches_team(item, diagnosis_teams)
-                )
-            )
+            and (job_name_match or team_match)
             and self._knowledge_year_allows(item, context_year)
         )
+
+    def _team_override_conflicts_with_current_diagnosis(
+        self,
+        item: JobKnowledge,
+        diagnosis_priority: DiagnosisPriority | None,
+    ) -> bool:
+        if diagnosis_priority is None:
+            return False
+        target_major = normalize_cell(item.target_major_job).casefold()
+        target_sub = normalize_cell(item.target_sub_job).casefold()
+        current_major = normalize_cell(diagnosis_priority.major_job).casefold()
+        current_sub = normalize_cell(diagnosis_priority.sub_job).casefold()
+        if not target_major or not target_sub or not current_major or not current_sub:
+            return False
+        return current_major == target_major and current_sub != target_sub
 
     def _diagnosis_override_context(self, context_json: str) -> tuple[str, list[str], list[str]]:
         try:
@@ -1278,7 +1305,7 @@ class OpenAICompatibleJobClassifier:
             "confidence_review_threshold": self.config.confidence_review_threshold,
             "previous_year_min_current_review_chars": self.config.previous_year_min_current_review_chars,
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
-            "near_hard_knowledge_policy": "diagnosis_input_stage1_override_team_v6",
+            "near_hard_knowledge_policy": "diagnosis_input_stage1_override_team_v7",
             "previous_year_prompt_policy": "fallback_only_when_current_review_short_v1",
             "self_review_pair_priority_policy": "taxonomy_major_sub_signal_match_v2",
             "stage2_pair_recovery_policy": "reason_major_sub_match_v2",

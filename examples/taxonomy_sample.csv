@@ -2,5 +2,14 @@
 소자,Process Integration,Memory,공정통합,DRAM PI,Cell
 소자,Process Integration,Memory,공정통합,NAND PI,Array
 소자,Device,Logic,소자개발,Device Characterization,Reliability
+소자,Device,NAND,소자개발,Device Characterization,NAND Reliability
+공정,Photo공정,DRAM,IPT,Photo Integration,IPT
+공정,Photo공정,DRAM,ISO,Photo Integration,ISO
+DIC,OPC,DRAM,OPC Technology,OPC Infra,Mask
+DIC,OPC,공통,OPC Infra,OPC Platform,
+DIC,OPC,NAND,OPC Technology,NAND OPC,
+DIC,DTCO,NAND,SPICE Modeling,회로 최적화,Robson
+DIC,SPICE Modeling,공통,SPICE Modeling,Model 검증,
 설계,Circuit,Memory,회로설계,Sense Amp,Timing
 품질,Quality,Common,불량분석,Failure Analysis,Root Cause
+품질,Quality,NAND,불량분석,Failure Analysis,Colosseum

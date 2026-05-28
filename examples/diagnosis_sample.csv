@@ -2,3 +2,8 @@ year,emp_num,name,team,진단 시 직무명,Category,항목
 2025,E0001,홍길동,DRAM공정 > DPC,Etch공정,CLN,Chamber clean
 2025,E0001,홍길동,DRAM공정 > DPC,Etch공정,MLM,Via scheme
 2025,E0002,김영희,품질분석팀,불량분석,Failure Analysis,Root cause
+2022,E0003,박민수,DRAM OPC,Photo공정,OPC Infra,Mask 확보
+2022,E0003,박민수,DRAM OPC,Photo공정,CROPC,조건 확보
+2022,E0004,이서연,Device Tech Solution > DTCO,SPICE Modeling,미기원-Modeling,회로 최적화
+2022,E0005,최지훈,DRAM OPC,SPICE Modeling,미기원-Modeling,Model 검증
+2025,E0006,정다은,Colosseum TF,불량분석,Failure Analysis,NAND signature

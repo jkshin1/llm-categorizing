@@ -1,3 +1,7 @@
 year,team,emp_num,name,self_review
 2025,PI팀,E0001,홍길동,"DRAM cell 공정 조건 변경 후 수율 저하 원인을 분석하고 integration split 평가를 수행했습니다."
 2025,품질분석팀,E0002,김영희,"고객 불량 샘플의 failure signature를 분석하고 root cause와 containment action을 정리했습니다."
+2022,DRAM OPC,E0003,박민수,"OPC 조건 확보, CROPC 적용, MASK 확보 등 OPC 인프라 업무를 수행했습니다. IPT, ISO, BLC, MT0, NFC 구간 이슈를 함께 검토했습니다."
+2022,Device Tech Solution > DTCO,E0004,이서연,"DTCO 관점에서 회로 최적화와 SPICE Modeling을 수행하고 RB(Robson) NAND 검토 결과를 정리했습니다."
+2022,DRAM OPC,E0005,최지훈,"SPICE Modeling 기반 회로 최적화, 모델 검증, simulation correlation 개선 업무를 수행했습니다."
+2025,Colosseum TF,E0006,정다은,"Colosseum 프로젝트의 고객 불량 샘플을 분석하고 NAND failure signature와 containment action을 정리했습니다."

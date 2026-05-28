@@ -1,0 +1,6 @@
+약어는 사용자가 입력한 원문 표기를 그대로 유지한다. TD, RB, OPC, SOM, CROPC, MASK 같은 약어를 LLM이 임의로 풀어쓴 영문 명칭으로 바꾸거나 alias에 추가하지 않는다.
+2021~2024년 diagnosis 직무명이 Photo공정이고 self_review에 OPC, CROPC, MASK, SOM, Recipe 중 하나 이상이 핵심 업무로 나타나면 현재 taxonomy 기준 중직무 DIC, 소직무 OPC로 보정한다. Device, 단위 직무, 세부 직무는 이 지식으로 지정하지 않는다.
+2021~2024년 diagnosis team에 DRAM OPC 또는 OPC가 포함되고 diagnosis 직무명이 Photo공정 등 과거 Photo 하위 직무명일 때 현재 taxonomy 기준 중직무 DIC, 소직무 OPC로 보정한다. diagnosis 직무명이 SPICE Modeling, DTCO처럼 현재 DIC 하위 소직무로 명확하면 이 지식으로 OPC로 바꾸지 않는다.
+DTCO는 Design-Technology Co-Optimization 관련 업무를 의미한다. self_review 또는 diagnosis_context에 DTCO, 회로 최적화, SPICE Modeling, simulation correlation, model 검증이 핵심 업무로 나타나면 DIC 내 DTCO 또는 SPICE Modeling 계열 후보를 우선 검토한다.
+RB 또는 Robson 키워드는 NAND 제품 관련 단서로 참고할 수 있지만, 이 키워드만으로 중직무나 소직무를 DIC > OPC로 제한하지 않는다.
+팀 명칭에 Colosseum이 포함된 경우 Device 컬럼만 NAND로 고정한다. 중직무, 소직무, 단위 직무, 세부 직무는 이 지식으로 지정하지 않는다.
