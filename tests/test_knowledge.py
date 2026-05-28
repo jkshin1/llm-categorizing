@@ -12,6 +12,7 @@ from llm_categorizing.knowledge import (
     _knowledge_normalizer_extra_body,
     fallback_knowledge_draft,
     knowledge_normalization_user_prompt,
+    preserve_explicit_target_scope,
     preserve_raw_knowledge_terms,
     raw_abbreviation_terms,
     validate_draft_against_taxonomy,
@@ -273,6 +274,8 @@ def test_knowledge_prompt_forbids_arbitrary_abbreviation_expansion() -> None:
     assert "입력에 명시되지 않은 약어 풀어쓰기" in KNOWLEDGE_NORMALIZATION_SYSTEM_PROMPT
     assert "aliases에는 사용자 입력 문자열에 실제 등장한 표기만 넣는다" in prompt
     assert "약어의 풀네임" in prompt
+    assert "Device 항목/컬럼만 지정하면 target_device만" in KNOWLEDGE_NORMALIZATION_SYSTEM_PROMPT
+    assert 'target_sub_job="Device"' in prompt
 
 
 def test_preserve_raw_knowledge_terms_removes_llm_abbreviation_expansion() -> None:
@@ -298,6 +301,51 @@ def test_preserve_raw_knowledge_terms_removes_llm_abbreviation_expansion() -> No
     assert preserved.target_sub_job == ""
     assert any("removed LLM-generated aliases" in error for error in preserved.validation_errors)
     assert any("cleared target_sub_job" in error for error in preserved.validation_errors)
+
+
+def test_preserve_explicit_device_only_target_scope_clears_inferred_path() -> None:
+    draft = KnowledgeDraft(
+        title="Colosseum NAND 지식",
+        aliases=["Colosseum"],
+        match_fields=["diagnosis_team"],
+        applies_when="Colosseum 프로젝트",
+        hint="Colosseum이면 NAND Device로 분류",
+        target_major_job="소자",
+        target_sub_job="Device",
+        target_device="NAND",
+        target_unit_job="소자개발",
+        target_detail_job_1="Device Characterization",
+        confidence=0.8,
+    )
+
+    preserved = preserve_explicit_target_scope(
+        "팀 명칭에 'Colosseum'이 포함된 경우 Device항목은 무조건 'NAND'로 분류해야 합니다.",
+        draft,
+    )
+
+    assert preserved.target_major_job == ""
+    assert preserved.target_sub_job == ""
+    assert preserved.target_device == "NAND"
+    assert preserved.target_unit_job == ""
+    assert preserved.target_detail_job_1 == ""
+    assert any("input only constrained Device target" in error for error in preserved.validation_errors)
+
+
+def test_preserve_explicit_device_only_target_scope_keeps_explicit_major_scope() -> None:
+    draft = KnowledgeDraft(
+        target_major_job="소자",
+        target_sub_job="Device",
+        target_device="NAND",
+    )
+
+    preserved = preserve_explicit_target_scope(
+        "중직무는 소자, 소직무는 Device, Device 항목은 NAND로 분류한다.",
+        draft,
+    )
+
+    assert preserved.target_major_job == "소자"
+    assert preserved.target_sub_job == "Device"
+    assert preserved.target_device == "NAND"
 
 
 def test_fallback_knowledge_draft_keeps_short_abbreviation_alias() -> None:

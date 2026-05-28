@@ -57,6 +57,7 @@ KNOWLEDGE_NORMALIZATION_SYSTEM_PROMPT = """너는 사내 직무 분류 지식을
 입력에 없는 내용을 꾸며내지 말고, 확실하지 않은 target 계층은 빈 문자열로 둔다.
 사용자 입력의 약어, 코드, 팀명, 프로젝트명, 제품명은 원문 표기 그대로 보존한다.
 입력에 명시되지 않은 약어 풀어쓰기, 번역, 영문 full name, 의미 추정 alias를 생성하지 않는다.
+사용자가 Device 항목/컬럼만 지정하면 target_device만 채우고 다른 target 계층은 빈 문자열로 둔다.
 match_fields는 이 지식이 어떤 입력 근거에서 매칭될 때 가장 신뢰할 수 있는지 고른다.
 저장된 지식은 LLM 분류 판단의 soft hint로 쓰이며, 자동 보정 rule이 아니다.
 응답은 설명 문장 없이 JSON 객체 하나만 출력한다."""
@@ -87,6 +88,8 @@ target_* 필드는 위 taxonomy 참고값에 존재하는 값만 사용하라.
 - 약어의 풀네임, 번역, 사전적 의미, 추정 확장명을 새 alias로 추가하지 않는다.
 - title, applies_when, hint에서도 약어를 임의로 풀어 쓰지 말고 입력 표현을 재사용한다.
 - target_* 필드는 사용자가 명시했거나 taxonomy 참고값이 입력 원문에 직접 등장할 때만 채운다.
+- 사용자가 "Device 항목", "Device 컬럼"처럼 Device 필드만 지정하면 target_device만 채운다.
+- 컬럼명으로 쓰인 Device를 소직무 target_sub_job="Device"로 저장하지 않는다.
 
 [knowledge_type 선택 기준]
 - glossary: 용어 설명
@@ -259,6 +262,60 @@ def preserve_raw_knowledge_terms(raw_text: str, draft: "KnowledgeDraft") -> "Kno
     if errors:
         updates["validation_errors"] = _dedupe_errors(errors)
     return draft.model_copy(update=updates).with_fallbacks(clean_raw_text)
+
+
+def preserve_explicit_target_scope(raw_text: str, draft: "KnowledgeDraft") -> "KnowledgeDraft":
+    clean_raw_text = normalize_cell(raw_text)
+    if not clean_raw_text or not _raw_requests_device_only_target(clean_raw_text):
+        return draft
+
+    updates: dict[str, object] = {}
+    errors = list(draft.validation_errors)
+    for field_name in (
+        "target_major_job",
+        "target_sub_job",
+        "target_unit_job",
+        "target_detail_job_1",
+        "target_detail_job_2",
+    ):
+        target_value = normalize_cell(getattr(draft, field_name))
+        if not target_value:
+            continue
+        updates[field_name] = ""
+        errors.append(
+            f"cleared {field_name}='{target_value}' because input only constrained Device target"
+        )
+
+    if not updates:
+        return draft
+    updates["validation_errors"] = _dedupe_errors(errors)
+    return draft.model_copy(update=updates).with_fallbacks(clean_raw_text)
+
+
+def _raw_requests_device_only_target(raw_text: str) -> bool:
+    text = normalize_cell(raw_text).casefold()
+    if not text:
+        return False
+    has_device_column = bool(
+        re.search(r"\bdevice\s*(?:항목|컬럼|column|field)?", text)
+        or re.search(r"(?:항목|컬럼|column|field)\s*(?:은|는|:)?\s*device\b", text)
+    )
+    if not has_device_column:
+        return False
+    has_device_value = bool(re.search(r"\bnand\b|\bdram\b|\blogic\b|\bmemory\b|공통", text))
+    if not has_device_value:
+        return False
+    positive_non_device_target = bool(
+        re.search(r"(?:중직무|소직무|단위\s*직무|세부\s*직무\s*1|세부\s*직무\s*2)\s*(?:은|는|:|=|를|을)", text)
+    )
+    negative_non_device_target = bool(
+        re.search(
+            r"(?:중직무|소직무|단위\s*직무|세부\s*직무).*"
+            r"(?:지정하지|정의하지|고정하지|분류하지|채우지)",
+            text,
+        )
+    )
+    return not positive_non_device_target or negative_non_device_target
 
 
 class KnowledgeDraft(BaseModel):
@@ -1380,6 +1437,7 @@ class KnowledgeNormalizer:
         if self.taxonomy:
             draft = validate_draft_against_taxonomy(draft, self.taxonomy)
         draft = preserve_raw_knowledge_terms(clean_text, draft)
+        draft = preserve_explicit_target_scope(clean_text, draft)
         return draft
 
 
