@@ -12,7 +12,7 @@ DEFAULT_LLM_TIMEOUT_SECONDS = 300.0
 DEFAULT_LLM_MAX_TOKENS = 1200
 DEFAULT_GLM_MAX_TOKENS = 2048
 DEFAULT_QWEN_THINKING_MAX_TOKENS = 4096
-SUPPORTED_ENDPOINT_PROFILES = {"auto", "internal", "alibaba"}
+SUPPORTED_ENDPOINT_PROFILES = {"auto", "internal", "alibaba", "openai"}
 SUPPORTED_PROVIDER_PROFILES = {"auto", "qwen", "glm", "generic"}
 
 
@@ -104,7 +104,7 @@ def _endpoint_settings_from_env(
     env: _ScopedEnv,
 ) -> tuple[str, tuple[str, ...], str, str]:
     if endpoint_profile == "auto":
-        for candidate in ["internal", "alibaba"]:
+        for candidate in ["internal", "alibaba", "openai"]:
             base_url, api_keys, model, _ = _endpoint_candidate_from_env(candidate, env)
             if base_url and api_keys and model:
                 return base_url, api_keys, model, candidate
@@ -115,7 +115,10 @@ def _endpoint_settings_from_env(
             f"{env.label('INTERNAL_LLM_MODEL')} or "
             f"{env.label('ALIBABA_BASE_URL')}/"
             f"{env.label('ALIBABA_API_KEYS')} or {env.label('ALIBABA_API_KEY')}/"
-            f"{env.label('ALIBABA_MODEL')}"
+            f"{env.label('ALIBABA_MODEL')} or "
+            f"{env.label('OPENAI_BASE_URL')}/"
+            f"{env.label('OPENAI_API_KEYS')} or {env.label('OPENAI_API_KEY')}/"
+            f"{env.label('OPENAI_MODEL')}"
         )
 
     base_url, api_keys, model, required = _endpoint_candidate_from_env(endpoint_profile, env)
@@ -131,6 +134,21 @@ def _endpoint_candidate_from_env(
     env: _ScopedEnv,
 ) -> tuple[str, tuple[str, ...], str, dict[str, object]]:
     common_model = env.get("LLM_MODEL", "").strip()
+    if endpoint_profile == "openai":
+        base_url = env.get("OPENAI_BASE_URL", "").strip()
+        api_keys = _api_keys_from_env(env, "OPENAI_API_KEYS", "OPENAI_API_KEY")
+        model = env.get("OPENAI_MODEL", "").strip() or common_model
+        return (
+            base_url,
+            api_keys,
+            model,
+            {
+                env.label("OPENAI_BASE_URL"): base_url,
+                f"{env.label('OPENAI_API_KEYS')} or {env.label('OPENAI_API_KEY')}": api_keys,
+                f"{env.label('OPENAI_MODEL')} or {env.label('LLM_MODEL')}": model,
+            },
+        )
+
     if endpoint_profile == "alibaba":
         base_url = env.get("ALIBABA_BASE_URL", "").strip()
         api_keys = _api_keys_from_env(env, "ALIBABA_API_KEYS", "ALIBABA_API_KEY")

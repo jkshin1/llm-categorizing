@@ -341,6 +341,65 @@ def test_knowledge_store_exports_and_imports_approved_ndjson(tmp_path) -> None:
     assert imported[0].target_major_job == "B"
 
 
+def test_knowledge_store_updates_entry_content_and_restores_revision(tmp_path) -> None:
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "AlphaTask는 A 후보를 의미한다.",
+        KnowledgeDraft(
+            title="AlphaTask 지식",
+            aliases=["AlphaTask"],
+            hint="A 후보를 우선 검토한다.",
+            target_major_job="A",
+        ),
+    )
+
+    updated = store.update_entry(
+        entry.id,
+        KnowledgeDraft(
+            title="BetaTask 지식",
+            aliases=["BetaTask"],
+            hint="B 후보를 우선 검토한다.",
+            target_major_job="B",
+            priority=90,
+            confidence=0.9,
+        ),
+        raw_text="BetaTask는 B 후보를 의미한다.",
+        review_status="draft",
+        enforcement_level="soft",
+    )
+
+    assert updated is not None
+    assert updated.raw_text == "BetaTask는 B 후보를 의미한다."
+    assert store.retrieve("AlphaTask 수행", limit=3) == []
+    assert [item.id for item in store.retrieve("BetaTask 수행", limit=3)] == [entry.id]
+
+    revisions = store.list_revisions(entry.id)
+    create_revision = next(revision for revision in revisions if revision["action"] == "create")
+    restored = store.restore_revision(entry.id, create_revision["id"])
+
+    assert restored is not None
+    assert restored.raw_text == entry.raw_text
+    assert restored.title == entry.title
+    assert [item.id for item in store.retrieve("AlphaTask 수행", limit=3)] == [entry.id]
+    assert store.retrieve("BetaTask 수행", limit=3) == []
+
+
+def test_knowledge_store_export_import_text_preserves_inactive_entries(tmp_path) -> None:
+    source_store = JobKnowledgeStore(tmp_path / "source.sqlite3")
+    entry = source_store.add(
+        "GammaTask 초안 지식",
+        KnowledgeDraft(aliases=["GammaTask"], hint="초안 지식"),
+    )
+    source_store.set_active(entry.id, False)
+
+    exported = source_store.export_ndjson_text(review_scope="all")
+    imported = JobKnowledgeStore(tmp_path / "imported.sqlite3").import_ndjson_text(exported)
+
+    assert len(imported) == 1
+    assert imported[0].raw_text == entry.raw_text
+    assert imported[0].active is False
+
+
 def test_near_hard_enforcement_is_strongest_hint(tmp_path) -> None:
     store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
     normal = store.add(
@@ -753,9 +812,12 @@ def test_knowledge_store_metadata_and_usage_log(tmp_path) -> None:
 
     with sqlite3.connect(db_path) as connection:
         usage_count = connection.execute("SELECT COUNT(*) FROM knowledge_usage").fetchone()[0]
+    usage_summary = store.usage_summary(entry.id)
 
     assert updated is not None
     assert updated.knowledge_type == "verified_rule"
     assert updated.review_status == "approved"
     assert retrieved[0].knowledge_type == "verified_rule"
     assert usage_count == 1
+    assert usage_summary["usage_count"] == 1
+    assert usage_summary["needs_review_rate"] == 0.0

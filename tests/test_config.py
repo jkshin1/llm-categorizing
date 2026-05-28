@@ -11,6 +11,10 @@ def _base_env(monkeypatch, model: str) -> None:
     monkeypatch.setenv("ALIBABA_API_KEYS", "")
     monkeypatch.setenv("ALIBABA_API_KEY", "")
     monkeypatch.setenv("ALIBABA_MODEL", "")
+    monkeypatch.setenv("OPENAI_BASE_URL", "")
+    monkeypatch.setenv("OPENAI_API_KEYS", "")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("OPENAI_MODEL", "")
     monkeypatch.setenv("LLM_MODEL", "")
     monkeypatch.setenv("LLM_PROVIDER_PROFILE", "auto")
     monkeypatch.setenv("LLM_MAX_TOKENS", "")
@@ -181,12 +185,51 @@ def test_alibaba_endpoint_profile_accepts_multiple_api_keys(monkeypatch) -> None
     assert settings.api_keys == ("alibaba-key-1", "alibaba-key-2")
 
 
+def test_openai_endpoint_profile_uses_openai_env(monkeypatch) -> None:
+    _base_env(monkeypatch, "internal-prod-model")
+    monkeypatch.setenv("LLM_ENDPOINT_PROFILE", "openai")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:8080/v1")
+    monkeypatch.setenv("OPENAI_API_KEY", "local-test")
+    monkeypatch.setenv("OPENAI_MODEL", "mlx-community/Qwen3.6-35B-A3B-OptiQ-4bit")
+
+    settings = LLMSettings.from_env()
+
+    assert settings.endpoint_profile == "openai"
+    assert settings.base_url == "http://127.0.0.1:8080/v1"
+    assert settings.api_key == "local-test"
+    assert settings.api_keys == ("local-test",)
+    assert settings.model == "mlx-community/Qwen3.6-35B-A3B-OptiQ-4bit"
+    assert settings.provider_profile == "qwen"
+
+
+def test_auto_endpoint_profile_falls_back_to_openai_when_others_are_missing(monkeypatch) -> None:
+    _base_env(monkeypatch, "internal-prod-model")
+    monkeypatch.setenv("LLM_ENDPOINT_PROFILE", "auto")
+    monkeypatch.setenv("INTERNAL_LLM_BASE_URL", "")
+    monkeypatch.setenv("INTERNAL_LLM_API_KEY", "")
+    monkeypatch.setenv("INTERNAL_LLM_MODEL", "")
+    monkeypatch.setenv("ALIBABA_BASE_URL", "")
+    monkeypatch.setenv("ALIBABA_API_KEY", "")
+    monkeypatch.setenv("ALIBABA_MODEL", "")
+    monkeypatch.setenv("OPENAI_BASE_URL", "http://127.0.0.1:8080/v1")
+    monkeypatch.setenv("OPENAI_API_KEYS", "local-1,local-2")
+    monkeypatch.setenv("OPENAI_MODEL", "local-qwen")
+
+    settings = LLMSettings.from_env()
+
+    assert settings.endpoint_profile == "openai"
+    assert settings.api_key == "local-1"
+    assert settings.api_keys == ("local-1", "local-2")
+    assert settings.model == "local-qwen"
+
+
 def test_role_scoped_alibaba_api_keys_override_shared_keys(monkeypatch) -> None:
     _base_env(monkeypatch, "internal-prod-model")
     monkeypatch.setenv("LLM_ENDPOINT_PROFILE", "alibaba")
     monkeypatch.setenv("ALIBABA_BASE_URL", "https://dashscope.example.com/compatible-mode/v1")
     monkeypatch.setenv("ALIBABA_API_KEYS", "shared-1,shared-2")
     monkeypatch.setenv("ALIBABA_MODEL", "qwen-plus")
+    monkeypatch.setenv("CLASSIFICATION_LLM_ENDPOINT_PROFILE", "alibaba")
     monkeypatch.setenv("CLASSIFICATION_ALIBABA_API_KEYS", '["class-1", "class-2"]')
 
     settings = LLMSettings.from_env(role="classification")

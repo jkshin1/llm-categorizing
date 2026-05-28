@@ -47,6 +47,17 @@ LLM_PROVIDER_PROFILE=auto
 LLM_TIMEOUT_SECONDS=300
 ```
 
+로컬 OpenAI-compatible 모델 서버를 쓰려면 endpoint profile을 `openai`로 바꾸고 `OPENAI_*` 값을 설정합니다.
+
+```text
+LLM_ENDPOINT_PROFILE=openai
+OPENAI_BASE_URL=http://127.0.0.1:8080/v1
+OPENAI_API_KEY=replace-me
+OPENAI_MODEL=mlx-community/Qwen3.6-35B-A3B-OptiQ-4bit
+LLM_PROVIDER_PROFILE=qwen
+LLM_USE_JSON_RESPONSE_FORMAT=0
+```
+
 사내 LLM API key를 여러 개 써서 분류 호출량을 나누려면 기존 `INTERNAL_LLM_API_KEY`에 쉼표 구분으로 넣거나, 더 명확하게 `INTERNAL_LLM_API_KEYS`를 사용합니다. 여러 key가 있으면 cache miss가 난 분류 1건마다 다음 key로 순환하고, 한 분류 안의 Stage 1/2 호출은 같은 key를 유지합니다.
 
 ```text
@@ -55,7 +66,7 @@ INTERNAL_LLM_API_KEY=internal-key-1,internal-key-2,internal-key-3
 INTERNAL_LLM_API_KEYS=["internal-key-1","internal-key-2","internal-key-3"]
 ```
 
-분류 판단 모델과 지식 저장/메모리 정리 모델은 역할별 환경변수로 따로 지정할 수 있습니다. 역할별 값이 있으면 우선 사용하고, 없으면 위 공통 `LLM_*`/`INTERNAL_LLM_*`/`ALIBABA_*` 값을 fallback으로 사용합니다.
+분류 판단 모델과 지식 저장/메모리 정리 모델은 역할별 환경변수로 따로 지정할 수 있습니다. 역할별 값이 있으면 우선 사용하고, 없으면 위 공통 `LLM_*`/`INTERNAL_LLM_*`/`ALIBABA_*`/`OPENAI_*` 값을 fallback으로 사용합니다.
 
 ```text
 CLASSIFICATION_LLM_ENDPOINT_PROFILE=internal
@@ -69,6 +80,19 @@ KNOWLEDGE_INTERNAL_LLM_MODEL=Qwen3.6-35B-A3B
 KNOWLEDGE_LLM_PROVIDER_PROFILE=qwen
 KNOWLEDGE_LLM_QWEN_DISABLE_THINKING=1
 KNOWLEDGE_LLM_MAX_TOKENS=1200
+```
+
+로컬 OpenAI-compatible endpoint에서 역할별 모델만 나누려면 아래처럼 `CLASSIFICATION_OPENAI_MODEL`, `KNOWLEDGE_OPENAI_MODEL`을 사용하세요.
+
+```text
+CLASSIFICATION_LLM_ENDPOINT_PROFILE=openai
+CLASSIFICATION_OPENAI_MODEL=mlx-community/Qwen3.6-35B-A3B-OptiQ-4bit
+CLASSIFICATION_LLM_PROVIDER_PROFILE=qwen
+
+KNOWLEDGE_LLM_ENDPOINT_PROFILE=openai
+KNOWLEDGE_OPENAI_MODEL=mlx-community/Qwen3.6-35B-A3B-OptiQ-4bit
+KNOWLEDGE_LLM_PROVIDER_PROFILE=qwen
+KNOWLEDGE_LLM_QWEN_DISABLE_THINKING=1
 ```
 
 Alibaba/DashScope OpenAI-compatible API를 쓰려면 endpoint profile을 바꿉니다.
@@ -279,6 +303,12 @@ python serve_knowledge.py --allow-fallback-normalizer
 ```
 
 저장된 지식은 처음에는 `soft_hint`/`draft`로 취급됩니다. 페이지에서 `승격`을 누르면 `verified_rule`/`approved`로 바뀌며, 분류 prompt에서 더 강한 참고 지식으로 전달됩니다. 그래도 자동 보정 rule은 아니므로, 실제 정확도 개선 여부는 샘플 재분류와 수동 검수로 확인해야 합니다.
+
+지식 목록에서는 제목/alias/target 검색, `draft`/`approved`/`rejected`, 활성 여부, `soft`/`strong`/`near_hard` 필터를 사용할 수 있습니다. 각 항목의 `편집`을 누르면 원문, 제목, alias, match field, target taxonomy, 우선순위, confidence, review status, enforcement level을 수정할 수 있습니다. 저장 시 `knowledge_aliases`, FTS 인덱스, revision 로그가 같이 갱신되므로 SQLite를 직접 수정하는 것보다 안전합니다.
+
+편집 화면의 `변경 이력`에서 이전 revision으로 복원할 수 있고, `사용 통계`에서 해당 지식이 분류에 몇 번 쓰였는지, 평균 match score와 `needs_review` 비율을 볼 수 있습니다. 운영에서는 사용 횟수가 높지만 `needs_review` 비율이 높은 지식부터 점검하고, 실제 정확도 개선이 확인된 지식만 `approved` 또는 `near_hard`로 승격하는 것을 권장합니다.
+
+검증된 지식 DB를 이관하거나 백업하려면 목록 상단의 `NDJSON 내보내기`를 사용합니다. `approved`는 승인 지식만, `usable`은 활성 draft/approved, `all`은 비활성/거절 항목까지 포함합니다. 다른 환경에서는 `NDJSON 가져오기`로 다시 넣을 수 있습니다.
 
 긴 텍스트 파일은 페이지의 `TXT 줄 단위 가져오기`에서 업로드할 수 있습니다. 빈 줄은 제외하고 줄바꿈 1줄을 지식 1개로 저장합니다. 기본 제한은 한 번에 최대 100줄, 줄당 최대 4,000자, 요청 본문 최대 1MB입니다.
 

@@ -6,7 +6,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from llm_categorizing.config import LLMSettings
 from llm_categorizing.knowledge import (
@@ -229,6 +229,26 @@ INDEX_HTML = """<!doctype html>
       font: inherit;
       font-size: 13px;
     }
+    input[type="text"],
+    input[type="number"],
+    select {
+      width: 100%;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #ffffff;
+      color: var(--text);
+      font: inherit;
+      min-height: 36px;
+      padding: 0 10px;
+      outline: none;
+    }
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(29, 111, 95, 0.12);
+    }
     label {
       display: inline-flex;
       align-items: center;
@@ -256,9 +276,41 @@ INDEX_HTML = """<!doctype html>
     button.danger {
       color: var(--danger);
     }
+    button.subtle {
+      color: var(--muted);
+    }
     button:disabled {
       cursor: not-allowed;
       opacity: 0.55;
+    }
+    .management {
+      padding: 12px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      gap: 10px;
+    }
+    .management-grid {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) 140px 120px 140px;
+      gap: 8px;
+    }
+    .management-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .import-ndjson {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-width: min(100%, 360px);
+    }
+    .export-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
     }
     .list {
       display: grid;
@@ -344,6 +396,107 @@ INDEX_HTML = """<!doctype html>
       color: var(--muted);
       text-align: center;
     }
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(17, 24, 39, 0.42);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      z-index: 20;
+    }
+    .modal[hidden] {
+      display: none;
+    }
+    .dialog {
+      width: min(1040px, 100%);
+      max-height: min(92vh, 980px);
+      overflow: auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 16px 50px rgba(17, 24, 39, 0.24);
+      display: grid;
+      gap: 0;
+    }
+    .dialog-head {
+      position: sticky;
+      top: 0;
+      background: var(--panel);
+      border-bottom: 1px solid var(--line);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      z-index: 1;
+    }
+    .dialog-title {
+      min-width: 0;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+    .editor {
+      padding: 16px;
+      display: grid;
+      gap: 14px;
+    }
+    .editor-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .field {
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+    .field.full {
+      grid-column: 1 / -1;
+    }
+    .field span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .field textarea {
+      min-height: 88px;
+    }
+    .field textarea.tall {
+      min-height: 132px;
+    }
+    .editor-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+    }
+    .side-panels {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 12px;
+    }
+    .subpanel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+      min-width: 0;
+    }
+    .subpanel-title {
+      font-weight: 800;
+    }
+    .revision-row,
+    .usage-row {
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+      display: grid;
+      gap: 5px;
+    }
     @media (max-width: 860px) {
       .shell {
         grid-template-columns: 1fr;
@@ -364,6 +517,17 @@ INDEX_HTML = """<!doctype html>
       }
       .file-import-controls {
         grid-template-columns: 1fr;
+      }
+      .management-grid,
+      .editor-grid,
+      .side-panels {
+        grid-template-columns: 1fr;
+      }
+      .management-actions,
+      .import-ndjson,
+      .export-actions {
+        align-items: stretch;
+        flex-direction: column;
       }
     }
   </style>
@@ -408,9 +572,112 @@ INDEX_HTML = """<!doctype html>
       </div>
     </section>
     <section class="panel">
+      <div class="management">
+        <div class="management-grid">
+          <input id="searchInput" type="text" placeholder="제목, alias, target 검색">
+          <select id="statusFilter">
+            <option value="">상태 전체</option>
+            <option value="draft">draft</option>
+            <option value="approved">approved</option>
+            <option value="rejected">rejected</option>
+          </select>
+          <select id="activeFilter">
+            <option value="">활성 전체</option>
+            <option value="active">활성</option>
+            <option value="inactive">비활성</option>
+          </select>
+          <select id="enforcementFilter">
+            <option value="">강도 전체</option>
+            <option value="soft">soft</option>
+            <option value="strong">strong</option>
+            <option value="near_hard">near_hard</option>
+          </select>
+        </div>
+        <div class="management-actions">
+          <div class="export-actions">
+            <select id="exportScope">
+              <option value="approved">approved export</option>
+              <option value="usable">usable export</option>
+              <option value="all">all export</option>
+            </select>
+            <button id="exportBtn" type="button">NDJSON 내보내기</button>
+          </div>
+          <div class="import-ndjson">
+            <input id="ndjsonFile" type="file" accept=".ndjson,.jsonl,application/x-ndjson,text/plain">
+            <button id="importNdjsonBtn" type="button">NDJSON 가져오기</button>
+          </div>
+        </div>
+      </div>
       <div id="knowledgeList" class="list"></div>
     </section>
   </main>
+  <div id="editorModal" class="modal" hidden>
+    <section class="dialog" role="dialog" aria-modal="true" aria-labelledby="editorTitle">
+      <div class="dialog-head">
+        <div>
+          <div id="editorTitle" class="dialog-title">지식 편집</div>
+          <div id="editorMeta" class="meta"></div>
+        </div>
+        <button id="closeEditorBtn" class="subtle" type="button">닫기</button>
+      </div>
+      <form id="editorForm" class="editor">
+        <div class="editor-grid">
+          <label class="field full"><span>원문</span><textarea id="editRawText" class="tall"></textarea></label>
+          <label class="field"><span>제목</span><input id="editTitle" type="text"></label>
+          <label class="field"><span>knowledge_type</span><select id="editKnowledgeType">
+            <option value="glossary">glossary</option>
+            <option value="soft_hint">soft_hint</option>
+            <option value="negative_hint">negative_hint</option>
+            <option value="correction">correction</option>
+            <option value="verified_rule">verified_rule</option>
+          </select></label>
+          <label class="field"><span>review_status</span><select id="editReviewStatus">
+            <option value="draft">draft</option>
+            <option value="approved">approved</option>
+            <option value="rejected">rejected</option>
+          </select></label>
+          <label class="field"><span>enforcement_level</span><select id="editEnforcement">
+            <option value="soft">soft</option>
+            <option value="strong">strong</option>
+            <option value="near_hard">near_hard</option>
+          </select></label>
+          <label class="field"><span>priority</span><input id="editPriority" type="number" min="1" max="100"></label>
+          <label class="field"><span>confidence</span><input id="editConfidence" type="number" min="0" max="1" step="0.01"></label>
+          <label class="field"><span>활성</span><select id="editActive">
+            <option value="true">활성</option>
+            <option value="false">비활성</option>
+          </select></label>
+          <label class="field"><span>aliases</span><textarea id="editAliases"></textarea></label>
+          <label class="field"><span>match_fields</span><textarea id="editMatchFields"></textarea></label>
+          <label class="field full"><span>적용 조건</span><textarea id="editAppliesWhen"></textarea></label>
+          <label class="field full"><span>힌트</span><textarea id="editHint" class="tall"></textarea></label>
+          <label class="field"><span>중직무</span><input id="editMajorJob" type="text"></label>
+          <label class="field"><span>소직무</span><input id="editSubJob" type="text"></label>
+          <label class="field"><span>Device</span><input id="editDevice" type="text"></label>
+          <label class="field"><span>단위 직무</span><input id="editUnitJob" type="text"></label>
+          <label class="field"><span>세부 직무1</span><input id="editDetailJob1" type="text"></label>
+          <label class="field"><span>세부 직무2</span><input id="editDetailJob2" type="text"></label>
+        </div>
+        <div class="editor-actions">
+          <label><input id="editClearConflicts" type="checkbox"> 충돌 경고 해제</label>
+          <div class="row-actions">
+            <button id="refreshDetailBtn" type="button">새로고침</button>
+            <button id="saveEditBtn" class="primary" type="submit">저장</button>
+          </div>
+        </div>
+        <div class="side-panels">
+          <section class="subpanel">
+            <div class="subpanel-title">사용 통계</div>
+            <div id="usagePanel" class="meta"></div>
+          </section>
+          <section class="subpanel">
+            <div class="subpanel-title">변경 이력</div>
+            <div id="revisionPanel" class="meta"></div>
+          </section>
+        </div>
+      </form>
+    </section>
+  </div>
   <script>
     const textEl = document.querySelector("#knowledgeText");
     const saveBtn = document.querySelector("#saveBtn");
@@ -419,6 +686,45 @@ INDEX_HTML = """<!doctype html>
     const listEl = document.querySelector("#knowledgeList");
     const statusEl = document.querySelector("#status");
     const useLlmEl = document.querySelector("#useLlm");
+    const searchInput = document.querySelector("#searchInput");
+    const statusFilter = document.querySelector("#statusFilter");
+    const activeFilter = document.querySelector("#activeFilter");
+    const enforcementFilter = document.querySelector("#enforcementFilter");
+    const exportScope = document.querySelector("#exportScope");
+    const exportBtn = document.querySelector("#exportBtn");
+    const ndjsonFileEl = document.querySelector("#ndjsonFile");
+    const importNdjsonBtn = document.querySelector("#importNdjsonBtn");
+    const editorModal = document.querySelector("#editorModal");
+    const editorForm = document.querySelector("#editorForm");
+    const closeEditorBtn = document.querySelector("#closeEditorBtn");
+    const refreshDetailBtn = document.querySelector("#refreshDetailBtn");
+    const editorTitle = document.querySelector("#editorTitle");
+    const editorMeta = document.querySelector("#editorMeta");
+    const usagePanel = document.querySelector("#usagePanel");
+    const revisionPanel = document.querySelector("#revisionPanel");
+    const editFields = {
+      raw_text: document.querySelector("#editRawText"),
+      title: document.querySelector("#editTitle"),
+      knowledge_type: document.querySelector("#editKnowledgeType"),
+      review_status: document.querySelector("#editReviewStatus"),
+      enforcement_level: document.querySelector("#editEnforcement"),
+      priority: document.querySelector("#editPriority"),
+      confidence: document.querySelector("#editConfidence"),
+      active: document.querySelector("#editActive"),
+      aliases: document.querySelector("#editAliases"),
+      match_fields: document.querySelector("#editMatchFields"),
+      applies_when: document.querySelector("#editAppliesWhen"),
+      hint: document.querySelector("#editHint"),
+      target_major_job: document.querySelector("#editMajorJob"),
+      target_sub_job: document.querySelector("#editSubJob"),
+      target_device: document.querySelector("#editDevice"),
+      target_unit_job: document.querySelector("#editUnitJob"),
+      target_detail_job_1: document.querySelector("#editDetailJob1"),
+      target_detail_job_2: document.querySelector("#editDetailJob2"),
+      clear_conflicts: document.querySelector("#editClearConflicts")
+    };
+    let knowledgeItems = [];
+    let selectedEntryId = "";
 
     const setStatus = (message) => {
       statusEl.textContent = message || "";
@@ -440,6 +746,21 @@ INDEX_HTML = """<!doctype html>
       entry.target_detail_job_2
     ].filter(Boolean).join(" > ");
 
+    const splitValues = (value) => {
+      const result = [];
+      const seen = new Set();
+      String(value || "").split(/\\r?\\n|,/).forEach((item) => {
+        const text = item.trim();
+        const key = text.toLocaleLowerCase();
+        if (!text || seen.has(key)) return;
+        seen.add(key);
+        result.push(text);
+      });
+      return result;
+    };
+
+    const valueText = (items) => (items || []).join("\\n");
+
     async function requestJson(url, options = {}) {
       const response = await fetch(url, {
         headers: { "Content-Type": "application/json" },
@@ -454,15 +775,43 @@ INDEX_HTML = """<!doctype html>
 
     async function loadEntries() {
       const payload = await requestJson("/api/knowledge");
-      renderEntries(payload.items || []);
+      knowledgeItems = payload.items || [];
+      renderEntries();
     }
 
-    function renderEntries(items) {
-      if (!items.length) {
+    function filterEntries(items) {
+      const query = searchInput.value.trim().toLocaleLowerCase();
+      const status = statusFilter.value;
+      const active = activeFilter.value;
+      const enforcement = enforcementFilter.value;
+      return items.filter((entry) => {
+        if (status && entry.review_status !== status) return false;
+        if (enforcement && entry.enforcement_level !== enforcement) return false;
+        if (active === "active" && !entry.active) return false;
+        if (active === "inactive" && entry.active) return false;
+        if (!query) return true;
+        const searchable = [
+          entry.id,
+          entry.raw_text,
+          entry.title,
+          entry.hint,
+          entry.applies_when,
+          entryTarget(entry),
+          ...(entry.aliases || []),
+          ...(entry.match_fields || []),
+          ...(entry.validation_errors || [])
+        ].join(" ").toLocaleLowerCase();
+        return searchable.includes(query);
+      });
+    }
+
+    function renderEntries(items = knowledgeItems) {
+      const displayItems = filterEntries(items);
+      if (!displayItems.length) {
         listEl.innerHTML = '<div class="empty">저장된 지식이 없습니다.</div>';
         return;
       }
-      listEl.innerHTML = items.map((entry) => {
+      listEl.innerHTML = displayItems.map((entry) => {
         const target = entryTarget(entry);
         const aliases = (entry.aliases || []).slice(0, 12)
           .map((alias) => `<span class="chip">${escapeHtml(alias)}</span>`)
@@ -492,6 +841,7 @@ INDEX_HTML = """<!doctype html>
                 <div class="meta">${escapeHtml(entry.id)} · priority ${escapeHtml(entry.priority)} · confidence ${escapeHtml(entry.confidence)}</div>
               </div>
               <div class="row-actions">
+                <button type="button" data-action="edit">편집</button>
                 <button type="button" data-action="${isVerified ? "draft" : "approve"}">${isVerified ? "초안" : "승격"}</button>
                 <button type="button" data-action="${isNearHard ? "strong-rule" : "near-hard-rule"}">${isNearHard ? "준하드 해제" : "준하드룰"}</button>
                 ${conflicts ? '<button type="button" data-action="clear-conflicts">충돌 해제</button>' : ""}
@@ -516,6 +866,124 @@ INDEX_HTML = """<!doctype html>
           </article>
         `;
       }).join("");
+    }
+
+    function setEditorEntry(entry) {
+      selectedEntryId = entry.id;
+      editorTitle.textContent = entry.title || entry.id;
+      editorMeta.textContent = `${entry.id} · created ${entry.created_at || ""} · updated ${entry.updated_at || ""}`;
+      editFields.raw_text.value = entry.raw_text || "";
+      editFields.title.value = entry.title || "";
+      editFields.knowledge_type.value = entry.knowledge_type || "soft_hint";
+      editFields.review_status.value = entry.review_status || "draft";
+      editFields.enforcement_level.value = entry.enforcement_level || "soft";
+      editFields.priority.value = entry.priority ?? 50;
+      editFields.confidence.value = entry.confidence ?? 0.5;
+      editFields.active.value = entry.active ? "true" : "false";
+      editFields.aliases.value = valueText(entry.aliases);
+      editFields.match_fields.value = valueText(entry.match_fields);
+      editFields.applies_when.value = entry.applies_when || "";
+      editFields.hint.value = entry.hint || "";
+      editFields.target_major_job.value = entry.target_major_job || "";
+      editFields.target_sub_job.value = entry.target_sub_job || "";
+      editFields.target_device.value = entry.target_device || "";
+      editFields.target_unit_job.value = entry.target_unit_job || "";
+      editFields.target_detail_job_1.value = entry.target_detail_job_1 || "";
+      editFields.target_detail_job_2.value = entry.target_detail_job_2 || "";
+      editFields.clear_conflicts.checked = false;
+    }
+
+    function renderUsage(usage) {
+      if (!usage || !usage.usage_count) {
+        usagePanel.innerHTML = "아직 분류 사용 기록이 없습니다.";
+        return;
+      }
+      const needsRate = Math.round((usage.needs_review_rate || 0) * 1000) / 10;
+      const recent = (usage.recent || []).slice(0, 8).map((item) => `
+        <div class="usage-row">
+          <div>${escapeHtml(item.final_major_job)} / ${escapeHtml(item.final_sub_job)} / ${escapeHtml(item.final_unit_job)}</div>
+          <div>score ${escapeHtml(Number(item.match_score || 0).toFixed(2))} · needs_review ${item.needs_review ? "Y" : "N"}</div>
+          <div>${escapeHtml(item.created_at)}</div>
+        </div>
+      `).join("");
+      usagePanel.innerHTML = `
+        <div>사용 ${escapeHtml(usage.usage_count)}회 · 분류 ${escapeHtml(usage.classification_count)}건 · 평균 score ${escapeHtml(Number(usage.avg_match_score || 0).toFixed(2))}</div>
+        <div>needs_review ${escapeHtml(usage.needs_review_count)}건 (${escapeHtml(needsRate)}%)</div>
+        ${recent}
+      `;
+    }
+
+    function renderRevisions(revisions) {
+      if (!revisions || !revisions.length) {
+        revisionPanel.innerHTML = "변경 이력이 없습니다.";
+        return;
+      }
+      revisionPanel.innerHTML = revisions.slice(0, 12).map((revision) => {
+        const snapshot = revision.snapshot || {};
+        return `
+          <div class="revision-row">
+            <div>${escapeHtml(revision.action)} · #${escapeHtml(revision.id)}</div>
+            <div>${escapeHtml(revision.created_at)}</div>
+            <div>${escapeHtml(snapshot.title || snapshot.raw_text || "")}</div>
+            <button type="button" data-action="restore-revision" data-revision-id="${escapeHtml(revision.id)}">이 버전으로 복원</button>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function openEditor(id) {
+      const payload = await requestJson(`/api/knowledge/${id}`);
+      setEditorEntry(payload.item);
+      renderUsage(payload.usage);
+      renderRevisions(payload.revisions);
+      editorModal.hidden = false;
+    }
+
+    function editorPayload() {
+      return {
+        raw_text: editFields.raw_text.value.trim(),
+        title: editFields.title.value.trim(),
+        knowledge_type: editFields.knowledge_type.value,
+        review_status: editFields.review_status.value,
+        enforcement_level: editFields.enforcement_level.value,
+        priority: Number(editFields.priority.value || 50),
+        confidence: Number(editFields.confidence.value || 0.5),
+        active: editFields.active.value === "true",
+        aliases: splitValues(editFields.aliases.value),
+        match_fields: splitValues(editFields.match_fields.value),
+        applies_when: editFields.applies_when.value.trim(),
+        hint: editFields.hint.value.trim(),
+        target_major_job: editFields.target_major_job.value.trim(),
+        target_sub_job: editFields.target_sub_job.value.trim(),
+        target_device: editFields.target_device.value.trim(),
+        target_unit_job: editFields.target_unit_job.value.trim(),
+        target_detail_job_1: editFields.target_detail_job_1.value.trim(),
+        target_detail_job_2: editFields.target_detail_job_2.value.trim(),
+        clear_conflicts: editFields.clear_conflicts.checked
+      };
+    }
+
+    async function saveEditor(event) {
+      event.preventDefault();
+      if (!selectedEntryId) return;
+      const payload = editorPayload();
+      if (!payload.raw_text) {
+        setStatus("원문 입력 필요");
+        editFields.raw_text.focus();
+        return;
+      }
+      setStatus("편집 저장 중");
+      try {
+        const result = await requestJson(`/api/knowledge/${selectedEntryId}/edit`, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        await loadEntries();
+        await openEditor(result.item.id);
+        setStatus("편집 저장됨");
+      } catch (error) {
+        setStatus(error.message);
+      }
     }
 
     async function saveEntry() {
@@ -573,8 +1041,72 @@ INDEX_HTML = """<!doctype html>
       }
     }
 
+    async function importNdjsonFile() {
+      const file = ndjsonFileEl.files && ndjsonFileEl.files[0];
+      if (!file) {
+        setStatus("NDJSON 파일 선택 필요");
+        ndjsonFileEl.focus();
+        return;
+      }
+      importNdjsonBtn.disabled = true;
+      setStatus("NDJSON 읽는 중");
+      try {
+        const text = await file.text();
+        const payload = await requestJson("/api/knowledge/import-ndjson", {
+          method: "POST",
+          body: JSON.stringify({ text })
+        });
+        ndjsonFileEl.value = "";
+        setStatus(`${payload.created_count || 0}개 가져옴`);
+        await loadEntries();
+      } catch (error) {
+        setStatus(error.message);
+      } finally {
+        importNdjsonBtn.disabled = false;
+      }
+    }
+
     saveBtn.addEventListener("click", saveEntry);
     importBtn.addEventListener("click", importTextFile);
+    importNdjsonBtn.addEventListener("click", importNdjsonFile);
+    exportBtn.addEventListener("click", () => {
+      window.location.href = `/api/knowledge/export?scope=${encodeURIComponent(exportScope.value)}`;
+    });
+    [searchInput, statusFilter, activeFilter, enforcementFilter].forEach((element) => {
+      element.addEventListener("input", () => renderEntries());
+      element.addEventListener("change", () => renderEntries());
+    });
+    closeEditorBtn.addEventListener("click", () => {
+      editorModal.hidden = true;
+    });
+    editorModal.addEventListener("click", (event) => {
+      if (event.target === editorModal) {
+        editorModal.hidden = true;
+      }
+    });
+    editorForm.addEventListener("submit", saveEditor);
+    refreshDetailBtn.addEventListener("click", () => {
+      if (selectedEntryId) {
+        openEditor(selectedEntryId).catch((error) => setStatus(error.message));
+      }
+    });
+    revisionPanel.addEventListener("click", async (event) => {
+      const button = event.target.closest("button[data-action='restore-revision']");
+      if (!button || !selectedEntryId) return;
+      const revisionId = Number(button.dataset.revisionId || 0);
+      if (!revisionId || !confirm("선택한 revision으로 현재 지식을 복원할까요?")) return;
+      try {
+        const payload = await requestJson(`/api/knowledge/${selectedEntryId}/restore`, {
+          method: "POST",
+          body: JSON.stringify({ revision_id: revisionId })
+        });
+        await loadEntries();
+        await openEditor(payload.item.id);
+        setStatus("복원됨");
+      } catch (error) {
+        setStatus(error.message);
+      }
+    });
     textEl.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
         event.preventDefault();
@@ -588,7 +1120,10 @@ INDEX_HTML = """<!doctype html>
       const id = item.dataset.id;
       const action = button.dataset.action;
       try {
-        if (action === "toggle") {
+        if (action === "edit") {
+          await openEditor(id);
+          return;
+        } else if (action === "toggle") {
           const active = item.classList.contains("inactive");
           await requestJson(`/api/knowledge/${id}/active`, {
             method: "POST",
@@ -620,7 +1155,12 @@ INDEX_HTML = """<!doctype html>
             body: JSON.stringify({ clear_conflicts: true })
           });
         } else if (action === "delete") {
+          if (!confirm("이 지식을 삭제할까요?")) return;
           await requestJson(`/api/knowledge/${id}`, { method: "DELETE" });
+          if (selectedEntryId === id) {
+            editorModal.hidden = true;
+            selectedEntryId = "";
+          }
         }
         await loadEntries();
         setStatus("반영됨");
@@ -726,6 +1266,26 @@ def import_text_chunks(
     }
 
 
+def draft_from_api_payload(payload: dict[str, Any]) -> KnowledgeDraft:
+    return KnowledgeDraft(
+        knowledge_type=payload.get("knowledge_type", "soft_hint"),
+        title=payload.get("title", ""),
+        aliases=payload.get("aliases", []),
+        match_fields=payload.get("match_fields", []),
+        applies_when=payload.get("applies_when", ""),
+        hint=payload.get("hint", ""),
+        target_major_job=payload.get("target_major_job", ""),
+        target_sub_job=payload.get("target_sub_job", ""),
+        target_device=payload.get("target_device", ""),
+        target_unit_job=payload.get("target_unit_job", ""),
+        target_detail_job_1=payload.get("target_detail_job_1", ""),
+        target_detail_job_2=payload.get("target_detail_job_2", ""),
+        priority=payload.get("priority", 50),
+        confidence=payload.get("confidence", 0.5),
+        validation_errors=payload.get("validation_errors", []),
+    )
+
+
 class KnowledgeRequestHandler(BaseHTTPRequestHandler):
     store: JobKnowledgeStore
     normalizer: KnowledgeNormalizer | None
@@ -733,13 +1293,39 @@ class KnowledgeRequestHandler(BaseHTTPRequestHandler):
     allow_fallback_normalizer: bool
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
         if path in {"", "/", "/index.html"}:
             self._send_html(INDEX_HTML)
+            return
+        if path == "/api/knowledge/export":
+            self._handle_export(parsed.query)
             return
         if path == "/api/knowledge":
             items = [item.to_api_dict() for item in self.store.list_recent(limit=100)]
             self._send_json({"items": items})
+            return
+        if path.startswith("/api/knowledge/") and path.endswith("/revisions"):
+            entry_id = path.removeprefix("/api/knowledge/").removesuffix("/revisions").strip("/")
+            self._send_json({"items": self.store.list_revisions(entry_id)})
+            return
+        if path.startswith("/api/knowledge/") and path.endswith("/usage"):
+            entry_id = path.removeprefix("/api/knowledge/").removesuffix("/usage").strip("/")
+            self._send_json(self.store.usage_summary(entry_id))
+            return
+        if path.startswith("/api/knowledge/"):
+            entry_id = path.removeprefix("/api/knowledge/").strip("/")
+            entry = self.store.get(entry_id)
+            if not entry:
+                self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+                return
+            self._send_json(
+                {
+                    "item": entry.to_api_dict(),
+                    "revisions": self.store.list_revisions(entry_id),
+                    "usage": self.store.usage_summary(entry_id),
+                }
+            )
             return
         self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
@@ -751,13 +1337,24 @@ class KnowledgeRequestHandler(BaseHTTPRequestHandler):
         if path == "/api/knowledge/import-text":
             self._handle_import_text()
             return
+        if path == "/api/knowledge/import-ndjson":
+            self._handle_import_ndjson()
+            return
         if path.startswith("/api/knowledge/") and path.endswith("/active"):
             entry_id = path.removeprefix("/api/knowledge/").removesuffix("/active").strip("/")
             self._handle_set_active(entry_id)
             return
+        if path.startswith("/api/knowledge/") and path.endswith("/edit"):
+            entry_id = path.removeprefix("/api/knowledge/").removesuffix("/edit").strip("/")
+            self._handle_edit(entry_id)
+            return
         if path.startswith("/api/knowledge/") and path.endswith("/metadata"):
             entry_id = path.removeprefix("/api/knowledge/").removesuffix("/metadata").strip("/")
             self._handle_update_metadata(entry_id)
+            return
+        if path.startswith("/api/knowledge/") and path.endswith("/restore"):
+            entry_id = path.removeprefix("/api/knowledge/").removesuffix("/restore").strip("/")
+            self._handle_restore(entry_id)
             return
         self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
 
@@ -824,6 +1421,25 @@ class KnowledgeRequestHandler(BaseHTTPRequestHandler):
         status = HTTPStatus.CREATED if result["created_count"] else HTTPStatus.BAD_GATEWAY
         self._send_json(result, status=status)
 
+    def _handle_import_ndjson(self) -> None:
+        try:
+            payload = self._read_json(max_bytes=MAX_IMPORT_BODY_BYTES)
+            raw_text = str(payload.get("text", "")).strip()
+            if not raw_text:
+                raise ValueError("NDJSON text is blank")
+            imported = self.store.import_ndjson_text(raw_text, source="web_ndjson_import")
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        self._send_json(
+            {
+                "created_count": len(imported),
+                "items": [item.to_api_dict() for item in imported],
+            },
+            status=HTTPStatus.CREATED,
+        )
+
     def _handle_set_active(self, entry_id: str) -> None:
         try:
             payload = self._read_json()
@@ -832,6 +1448,31 @@ class KnowledgeRequestHandler(BaseHTTPRequestHandler):
             return
 
         entry = self.store.set_active(entry_id, bool(payload.get("active", True)))
+        if not entry:
+            self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        self._send_json({"item": entry.to_api_dict()})
+
+    def _handle_edit(self, entry_id: str) -> None:
+        try:
+            payload = self._read_json()
+            draft = draft_from_api_payload(payload)
+            if self.taxonomy:
+                draft = validate_draft_against_taxonomy(draft, self.taxonomy)
+            active = payload.get("active")
+            entry = self.store.update_entry(
+                entry_id,
+                draft,
+                raw_text=payload.get("raw_text"),
+                active=active if isinstance(active, bool) else None,
+                review_status=payload.get("review_status"),
+                enforcement_level=payload.get("enforcement_level"),
+                clear_conflicts=bool(payload.get("clear_conflicts", False)),
+            )
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
         if not entry:
             self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
             return
@@ -856,6 +1497,35 @@ class KnowledgeRequestHandler(BaseHTTPRequestHandler):
             return
         self._send_json({"item": entry.to_api_dict()})
 
+    def _handle_restore(self, entry_id: str) -> None:
+        try:
+            payload = self._read_json()
+            revision_id = int(payload.get("revision_id", 0))
+            if revision_id <= 0:
+                raise ValueError("revision_id is required")
+            entry = self.store.restore_revision(entry_id, revision_id)
+        except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+
+        if not entry:
+            self._send_json({"error": "not found"}, status=HTTPStatus.NOT_FOUND)
+            return
+        self._send_json({"item": entry.to_api_dict()})
+
+    def _handle_export(self, query: str) -> None:
+        review_scope = parse_qs(query).get("scope", ["approved"])[0]
+        try:
+            text = self.store.export_ndjson_text(review_scope=review_scope)
+        except ValueError as exc:
+            self._send_json({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            return
+        self._send_text(
+            text,
+            content_type="application/x-ndjson; charset=utf-8",
+            filename=f"job_knowledge_{review_scope}.ndjson",
+        )
+
     def _read_json(self, *, max_bytes: int = MAX_JSON_BODY_BYTES) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
@@ -873,6 +1543,22 @@ class KnowledgeRequestHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
+
+    def _send_text(
+        self,
+        text: str,
+        *,
+        content_type: str = "text/plain; charset=utf-8",
+        filename: str | None = None,
+    ) -> None:
+        encoded = text.encode("utf-8")
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(encoded)))
+        if filename:
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.end_headers()
         self.wfile.write(encoded)
 
@@ -920,7 +1606,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.allow_fallback_normalizer:
             print(f"LLM normalizer unavailable: {exc}")
             print(
-                "Set KNOWLEDGE_INTERNAL_LLM_* or KNOWLEDGE_ALIBABA_* env vars, "
+                "Set KNOWLEDGE_INTERNAL_LLM_*, KNOWLEDGE_ALIBABA_*, or KNOWLEDGE_OPENAI_* env vars, "
                 "or run with --allow-fallback-normalizer."
             )
         else:

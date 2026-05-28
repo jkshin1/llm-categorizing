@@ -1274,6 +1274,259 @@ class JobKnowledgeStore:
             ).fetchall()
         return [JobKnowledge.from_row(row) for row in rows]
 
+    def get(self, entry_id: str) -> JobKnowledge | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM knowledge_entries WHERE id = ?",
+                (entry_id,),
+            ).fetchone()
+        return JobKnowledge.from_row(row) if row else None
+
+    def list_revisions(self, entry_id: str, *, limit: int = 30) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT id, entry_id, action, snapshot_json, created_at
+                FROM knowledge_revisions
+                WHERE entry_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (entry_id, limit),
+            ).fetchall()
+
+        revisions: list[dict[str, Any]] = []
+        for row in rows:
+            try:
+                snapshot = json.loads(row["snapshot_json"] or "{}")
+            except json.JSONDecodeError:
+                snapshot = {}
+            if not isinstance(snapshot, dict):
+                snapshot = {}
+            revisions.append(
+                {
+                    "id": row["id"],
+                    "entry_id": row["entry_id"],
+                    "action": row["action"],
+                    "created_at": row["created_at"],
+                    "snapshot": snapshot,
+                }
+            )
+        return revisions
+
+    def usage_summary(self, entry_id: str, *, recent_limit: int = 20) -> dict[str, Any]:
+        with self._connect() as connection:
+            summary = connection.execute(
+                """
+                SELECT
+                    COUNT(*) AS usage_count,
+                    COUNT(DISTINCT classification_id) AS classification_count,
+                    COALESCE(AVG(match_score), 0.0) AS avg_match_score,
+                    COALESCE(SUM(needs_review), 0) AS needs_review_count
+                FROM knowledge_usage
+                WHERE knowledge_id = ?
+                """,
+                (entry_id,),
+            ).fetchone()
+            recent_rows = connection.execute(
+                """
+                SELECT classification_id, match_score, final_major_job, final_sub_job,
+                       final_unit_job, needs_review, created_at
+                FROM knowledge_usage
+                WHERE knowledge_id = ?
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (entry_id, recent_limit),
+            ).fetchall()
+
+        usage_count = int(summary["usage_count"]) if summary else 0
+        needs_review_count = int(summary["needs_review_count"]) if summary else 0
+        return {
+            "knowledge_id": entry_id,
+            "usage_count": usage_count,
+            "classification_count": int(summary["classification_count"]) if summary else 0,
+            "avg_match_score": float(summary["avg_match_score"]) if summary else 0.0,
+            "needs_review_count": needs_review_count,
+            "needs_review_rate": (needs_review_count / usage_count) if usage_count else 0.0,
+            "recent": [
+                {
+                    "classification_id": row["classification_id"],
+                    "match_score": float(row["match_score"]),
+                    "final_major_job": row["final_major_job"],
+                    "final_sub_job": row["final_sub_job"],
+                    "final_unit_job": row["final_unit_job"],
+                    "needs_review": bool(row["needs_review"]),
+                    "created_at": row["created_at"],
+                }
+                for row in recent_rows
+            ],
+        }
+
+    def update_entry(
+        self,
+        entry_id: str,
+        draft: KnowledgeDraft,
+        *,
+        raw_text: str | None = None,
+        active: bool | None = None,
+        review_status: str | None = None,
+        enforcement_level: str | None = None,
+        clear_conflicts: bool = False,
+        action: str = "content_update",
+    ) -> JobKnowledge | None:
+        existing = self.get(entry_id)
+        if not existing:
+            return None
+
+        clean_raw_text = normalize_cell(raw_text if raw_text is not None else existing.raw_text)
+        if not clean_raw_text:
+            raise ValueError("knowledge text is blank")
+
+        clean_draft = draft.with_fallbacks(clean_raw_text)
+        clean_type = clean_draft.knowledge_type
+        clean_status = (
+            normalize_cell(review_status).casefold()
+            if review_status is not None
+            else existing.review_status
+        )
+        clean_enforcement = (
+            normalize_cell(enforcement_level).casefold()
+            if enforcement_level is not None
+            else existing.enforcement_level
+        )
+        if clean_status not in SUPPORTED_REVIEW_STATUSES:
+            raise ValueError(f"review_status must be one of: {', '.join(sorted(SUPPORTED_REVIEW_STATUSES))}")
+        if clean_enforcement not in SUPPORTED_ENFORCEMENT_LEVELS:
+            raise ValueError(
+                f"enforcement_level must be one of: {', '.join(sorted(SUPPORTED_ENFORCEMENT_LEVELS))}"
+            )
+
+        if clean_enforcement == "near_hard":
+            clean_type = "verified_rule"
+            clean_status = "approved"
+            clear_conflicts = True
+        elif clean_enforcement == "strong":
+            if clean_type == "soft_hint":
+                clean_type = "verified_rule"
+            if clean_status == "draft":
+                clean_status = "approved"
+        elif clean_enforcement == "soft" and clean_status == "draft" and clean_type == "verified_rule":
+            clean_type = "soft_hint"
+
+        conflicts = [] if clear_conflicts or clean_status == "approved" else self.find_conflicts(
+            clean_draft,
+            exclude_id=entry_id,
+        )
+        validation_errors = _dedupe_errors(
+            list(clean_draft.validation_errors) + conflict_validation_errors(conflicts)
+        )
+        if conflicts and clean_status != "approved":
+            clean_status = "draft"
+            clean_enforcement = "soft"
+
+        now = _utc_now()
+        active_value = existing.active if active is None else bool(active)
+        if clean_status == "rejected":
+            active_value = False
+
+        values = {
+            "id": entry_id,
+            "raw_text": clean_raw_text,
+            "knowledge_type": clean_type,
+            "title": clean_draft.title,
+            "aliases_json": json.dumps(clean_draft.aliases, ensure_ascii=False),
+            "match_fields_json": json.dumps(clean_draft.match_fields, ensure_ascii=False),
+            "applies_when": clean_draft.applies_when,
+            "hint": clean_draft.hint,
+            "target_major_job": clean_draft.target_major_job,
+            "target_sub_job": clean_draft.target_sub_job,
+            "target_device": clean_draft.target_device,
+            "target_unit_job": clean_draft.target_unit_job,
+            "target_detail_job_1": clean_draft.target_detail_job_1,
+            "target_detail_job_2": clean_draft.target_detail_job_2,
+            "priority": clean_draft.priority,
+            "confidence": clean_draft.confidence,
+            "active": 1 if active_value else 0,
+            "review_status": clean_status,
+            "enforcement_level": clean_enforcement,
+            "validation_errors_json": json.dumps(validation_errors, ensure_ascii=False),
+            "conflicts_json": json.dumps(conflicts, ensure_ascii=False),
+            "updated_at": now,
+        }
+        with self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE knowledge_entries
+                SET raw_text = :raw_text,
+                    knowledge_type = :knowledge_type,
+                    title = :title,
+                    aliases_json = :aliases_json,
+                    match_fields_json = :match_fields_json,
+                    applies_when = :applies_when,
+                    hint = :hint,
+                    target_major_job = :target_major_job,
+                    target_sub_job = :target_sub_job,
+                    target_device = :target_device,
+                    target_unit_job = :target_unit_job,
+                    target_detail_job_1 = :target_detail_job_1,
+                    target_detail_job_2 = :target_detail_job_2,
+                    priority = :priority,
+                    confidence = :confidence,
+                    active = :active,
+                    review_status = :review_status,
+                    enforcement_level = :enforcement_level,
+                    validation_errors_json = :validation_errors_json,
+                    conflicts_json = :conflicts_json,
+                    updated_at = :updated_at
+                WHERE id = :id
+                """,
+                values,
+            )
+            row = connection.execute(
+                "SELECT * FROM knowledge_entries WHERE id = ?",
+                (entry_id,),
+            ).fetchone()
+            if not row:
+                return None
+            knowledge = JobKnowledge.from_row(row)
+            self._sync_entry_indexes(connection, knowledge)
+            self._record_revision(connection, knowledge, action, created_at=now)
+        return knowledge
+
+    def restore_revision(self, entry_id: str, revision_id: int) -> JobKnowledge | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                """
+                SELECT snapshot_json
+                FROM knowledge_revisions
+                WHERE entry_id = ? AND id = ?
+                """,
+                (entry_id, revision_id),
+            ).fetchone()
+        if not row:
+            return None
+
+        try:
+            payload = json.loads(row["snapshot_json"] or "{}")
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"invalid revision snapshot: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("invalid revision snapshot: expected object")
+
+        draft = _knowledge_draft_from_payload(payload)
+        active_payload = payload.get("active", True)
+        return self.update_entry(
+            entry_id,
+            draft,
+            raw_text=payload.get("raw_text", ""),
+            active=bool(active_payload),
+            review_status=payload.get("review_status", "draft"),
+            enforcement_level=payload.get("enforcement_level", "soft"),
+            clear_conflicts=True,
+            action=f"restore_revision:{revision_id}",
+        )
+
     def export_ndjson(
         self,
         path: str | Path,
@@ -1304,12 +1557,30 @@ class JobKnowledgeStore:
         with path.open("w", encoding="utf-8") as handle:
             for row in rows:
                 knowledge = JobKnowledge.from_row(row)
-                handle.write(
-                    json.dumps(_knowledge_export_payload(knowledge), ensure_ascii=False, sort_keys=True)
-                )
+                handle.write(_knowledge_to_ndjson_line(knowledge))
                 handle.write("\n")
                 count += 1
         return count
+
+    def export_ndjson_text(self, *, review_scope: str = "approved") -> str:
+        if review_scope not in {"approved", "usable", "all"}:
+            raise ValueError("review_scope must be one of: approved, usable, all")
+        where = "WHERE active = 1 AND review_status = 'approved'"
+        if review_scope == "usable":
+            where = "WHERE active = 1 AND review_status != 'rejected'"
+        elif review_scope == "all":
+            where = ""
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM knowledge_entries
+                {where}
+                ORDER BY id
+                """
+            ).fetchall()
+        return "\n".join(_knowledge_to_ndjson_line(JobKnowledge.from_row(row)) for row in rows)
 
     def import_ndjson(
         self,
@@ -1317,59 +1588,54 @@ class JobKnowledgeStore:
         *,
         source: str = "ndjson_import",
     ) -> list[JobKnowledge]:
-        imported: list[JobKnowledge] = []
-        with Path(path).open("r", encoding="utf-8") as handle:
-            for line_number, line in enumerate(handle, start=1):
-                text = line.strip()
-                if not text:
-                    continue
-                try:
-                    payload = json.loads(text)
-                except json.JSONDecodeError as exc:
-                    raise ValueError(f"invalid NDJSON at line {line_number}: {exc}") from exc
-                if not isinstance(payload, dict):
-                    raise ValueError(f"invalid NDJSON at line {line_number}: expected object")
+        return self.import_ndjson_text(Path(path).read_text(encoding="utf-8"), source=source)
 
-                raw_text = normalize_cell(payload.get("raw_text", ""))
-                if not raw_text:
-                    raise ValueError(f"invalid NDJSON at line {line_number}: raw_text is required")
-                draft = KnowledgeDraft(
-                    knowledge_type=payload.get("knowledge_type", "soft_hint"),
-                    title=payload.get("title", ""),
-                    aliases=payload.get("aliases", []),
-                    match_fields=payload.get("match_fields", []),
-                    applies_when=payload.get("applies_when", ""),
-                    hint=payload.get("hint", ""),
-                    target_major_job=payload.get("target_major_job", ""),
-                    target_sub_job=payload.get("target_sub_job", ""),
-                    target_device=payload.get("target_device", ""),
-                    target_unit_job=payload.get("target_unit_job", ""),
-                    target_detail_job_1=payload.get("target_detail_job_1", ""),
-                    target_detail_job_2=payload.get("target_detail_job_2", ""),
-                    priority=payload.get("priority", 50),
-                    confidence=payload.get("confidence", 0.5),
-                    validation_errors=payload.get("validation_errors", []),
-                ).with_fallbacks(raw_text)
-                entry = self.add(raw_text, draft, source=source)
-                review_status = normalize_cell(payload.get("review_status", "")).casefold()
-                enforcement_level = normalize_cell(payload.get("enforcement_level", "")).casefold()
-                knowledge_type = normalize_cell(payload.get("knowledge_type", "")).casefold()
-                if (
-                    review_status in SUPPORTED_REVIEW_STATUSES
-                    or enforcement_level in SUPPORTED_ENFORCEMENT_LEVELS
-                    or knowledge_type in SUPPORTED_KNOWLEDGE_TYPES
-                ):
-                    updated = self.update_metadata(
-                        entry.id,
-                        knowledge_type=knowledge_type if knowledge_type in SUPPORTED_KNOWLEDGE_TYPES else None,
-                        review_status=review_status if review_status in SUPPORTED_REVIEW_STATUSES else None,
-                        enforcement_level=(
-                            enforcement_level if enforcement_level in SUPPORTED_ENFORCEMENT_LEVELS else None
-                        ),
-                    )
-                    if updated is not None:
-                        entry = updated
-                imported.append(entry)
+    def import_ndjson_text(
+        self,
+        text: str,
+        *,
+        source: str = "ndjson_import",
+    ) -> list[JobKnowledge]:
+        imported: list[JobKnowledge] = []
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            line_text = line.strip()
+            if not line_text:
+                continue
+            try:
+                payload = json.loads(line_text)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"invalid NDJSON at line {line_number}: {exc}") from exc
+            if not isinstance(payload, dict):
+                raise ValueError(f"invalid NDJSON at line {line_number}: expected object")
+
+            raw_text = normalize_cell(payload.get("raw_text", ""))
+            if not raw_text:
+                raise ValueError(f"invalid NDJSON at line {line_number}: raw_text is required")
+            draft = _knowledge_draft_from_payload(payload).with_fallbacks(raw_text)
+            entry = self.add(raw_text, draft, source=source)
+            review_status = normalize_cell(payload.get("review_status", "")).casefold()
+            enforcement_level = normalize_cell(payload.get("enforcement_level", "")).casefold()
+            knowledge_type = normalize_cell(payload.get("knowledge_type", "")).casefold()
+            if (
+                review_status in SUPPORTED_REVIEW_STATUSES
+                or enforcement_level in SUPPORTED_ENFORCEMENT_LEVELS
+                or knowledge_type in SUPPORTED_KNOWLEDGE_TYPES
+            ):
+                updated = self.update_metadata(
+                    entry.id,
+                    knowledge_type=knowledge_type if knowledge_type in SUPPORTED_KNOWLEDGE_TYPES else None,
+                    review_status=review_status if review_status in SUPPORTED_REVIEW_STATUSES else None,
+                    enforcement_level=(
+                        enforcement_level if enforcement_level in SUPPORTED_ENFORCEMENT_LEVELS else None
+                    ),
+                )
+                if updated is not None:
+                    entry = updated
+            if isinstance(payload.get("active"), bool) and bool(payload["active"]) != entry.active:
+                updated = self.set_active(entry.id, bool(payload["active"]))
+                if updated is not None:
+                    entry = updated
+            imported.append(entry)
         return imported
 
     def set_active(self, entry_id: str, active: bool) -> JobKnowledge | None:
@@ -2130,6 +2396,30 @@ def _knowledge_export_payload(knowledge: JobKnowledge) -> dict[str, Any]:
     payload = knowledge.to_api_dict()
     payload.pop("match_score", None)
     return payload
+
+
+def _knowledge_draft_from_payload(payload: dict[str, Any]) -> KnowledgeDraft:
+    return KnowledgeDraft(
+        knowledge_type=payload.get("knowledge_type", "soft_hint"),
+        title=payload.get("title", ""),
+        aliases=payload.get("aliases", []),
+        match_fields=payload.get("match_fields", []),
+        applies_when=payload.get("applies_when", ""),
+        hint=payload.get("hint", ""),
+        target_major_job=payload.get("target_major_job", ""),
+        target_sub_job=payload.get("target_sub_job", ""),
+        target_device=payload.get("target_device", ""),
+        target_unit_job=payload.get("target_unit_job", ""),
+        target_detail_job_1=payload.get("target_detail_job_1", ""),
+        target_detail_job_2=payload.get("target_detail_job_2", ""),
+        priority=payload.get("priority", 50),
+        confidence=payload.get("confidence", 0.5),
+        validation_errors=payload.get("validation_errors", []),
+    )
+
+
+def _knowledge_to_ndjson_line(knowledge: JobKnowledge) -> str:
+    return json.dumps(_knowledge_export_payload(knowledge), ensure_ascii=False, sort_keys=True)
 
 
 def _knowledge_revision_snapshot(knowledge: JobKnowledge) -> dict[str, Any]:
