@@ -317,6 +317,277 @@ def test_diagnosis_job_name_takes_precedence_over_conflicting_near_hard_knowledg
     assert "diagnosis 직무명 우선 적용" in result["knowledge_priority_reason"]
 
 
+def test_near_hard_diagnosis_job_name_mapping_overrides_legacy_diagnosis_pair(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "공정",
+                "소직무": "Photo공정",
+                "Device": "",
+                "단위 직무": "Photo",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "DIC",
+                "소직무": "OPC",
+                "Device": "",
+                "단위 직무": "OPC",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "2021~2024년 진단 시 직무명 Photo공정은 OPC 단서가 있으면 현재 DIC > OPC로 보정한다.",
+        KnowledgeDraft(
+            title="Photo공정 과거 OPC 매핑",
+            aliases=["Photo공정", "OPC", "CROPC", "MASK"],
+            match_fields=["diagnosis_job_name", "self_review"],
+            hint="2021~2024년 Photo공정 진단명과 OPC 업무 단서가 함께 있으면 DIC > OPC 후보를 우선한다.",
+            target_major_job="DIC",
+            target_sub_job="OPC",
+        ),
+    )
+    store.update_metadata(entry.id, enforcement_level="near_hard")
+    classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(),
+        knowledge_store=store,
+    )
+    diagnosis_context = DiagnosisContext(
+        year="2022",
+        emp_num="E0002",
+        row_count=1,
+        teams=[],
+        job_names=["Photo공정"],
+        categories=[],
+        evidence_rows=[],
+    )
+
+    def fail_stage1(self, context_json, candidate_pairs=None):
+        raise AssertionError("near-hard legacy mapping should select the pair before stage1")
+
+    def fixed_stage2(self, context_json, candidates):
+        assert candidates == [taxonomy.rows[1]]
+        return FinalClassificationResult(
+            major_job="DIC",
+            sub_job="OPC",
+            device="",
+            unit_job="OPC",
+            detail_job_1="",
+            detail_job_2="",
+            confidence=0.94,
+            needs_review=False,
+            reason="Photo공정 과거 진단명과 OPC/CROPC/MASK 업무 단서가 함께 있어 DIC > OPC로 보정",
+        )
+
+    classifier._run_stage1 = MethodType(fail_stage1, classifier)
+    classifier._run_stage2 = MethodType(fixed_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2022",
+            "team": "",
+            "emp_num": "E0002",
+            "name": "홍길동",
+            "self_review": "OPC 조건 확보, CROPC 적용, MASK 확보 등 OPC 인프라 업무 수행",
+        },
+        diagnosis_context=diagnosis_context,
+    )
+
+    assert result["중직무"] == "DIC"
+    assert result["소직무"] == "OPC"
+    assert "준하드룰 지식이 과거 diagnosis 직무명 보정" in result["diagnosis_priority_reason"]
+    assert "diagnosis 직무명 보정으로 stage1 후보 제한" in result["knowledge_priority_reason"]
+
+
+def test_near_hard_legacy_mapping_requires_matching_diagnosis_job_name(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "공정",
+                "소직무": "Etch공정",
+                "Device": "",
+                "단위 직무": "Etch",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "DIC",
+                "소직무": "OPC",
+                "Device": "",
+                "단위 직무": "OPC",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "2021~2024년 진단 시 직무명 Photo공정은 OPC 단서가 있으면 현재 DIC > OPC로 보정한다.",
+        KnowledgeDraft(
+            title="Photo공정 과거 OPC 매핑",
+            aliases=["Photo공정", "OPC", "CROPC", "MASK"],
+            match_fields=["diagnosis_job_name", "self_review"],
+            hint="2021~2024년 Photo공정 진단명과 OPC 업무 단서가 함께 있으면 DIC > OPC 후보를 우선한다.",
+            target_major_job="DIC",
+            target_sub_job="OPC",
+        ),
+    )
+    store.update_metadata(entry.id, enforcement_level="near_hard")
+    classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(),
+        knowledge_store=store,
+    )
+    diagnosis_context = DiagnosisContext(
+        year="2022",
+        emp_num="E0003",
+        row_count=1,
+        teams=[],
+        job_names=["Etch공정"],
+        categories=[],
+        evidence_rows=[],
+    )
+
+    def fail_stage1(self, context_json, candidate_pairs=None):
+        raise AssertionError("diagnosis job name should select the pair before stage1")
+
+    def fixed_stage2(self, context_json, candidates):
+        assert candidates == [taxonomy.rows[0]]
+        return FinalClassificationResult(
+            major_job="공정",
+            sub_job="Etch공정",
+            device="",
+            unit_job="Etch",
+            detail_job_1="",
+            detail_job_2="",
+            confidence=0.9,
+            needs_review=False,
+            reason="진단 직무명 Etch공정이 우선",
+        )
+
+    classifier._run_stage1 = MethodType(fail_stage1, classifier)
+    classifier._run_stage2 = MethodType(fixed_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2022",
+            "team": "",
+            "emp_num": "E0003",
+            "name": "홍길동",
+            "self_review": "OPC 조건 확보, CROPC 적용, MASK 확보 업무도 일부 수행",
+        },
+        diagnosis_context=diagnosis_context,
+    )
+
+    assert result["중직무"] == "공정"
+    assert result["소직무"] == "Etch공정"
+    assert "diagnosis 직무명 우선 적용" in result["knowledge_priority_reason"]
+
+
+def test_near_hard_legacy_mapping_does_not_override_outside_year_range(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "공정",
+                "소직무": "Photo공정",
+                "Device": "",
+                "단위 직무": "Photo",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "DIC",
+                "소직무": "OPC",
+                "Device": "",
+                "단위 직무": "OPC",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "2021~2024년 진단 시 직무명 Photo공정은 OPC 단서가 있으면 현재 DIC > OPC로 보정한다.",
+        KnowledgeDraft(
+            title="Photo공정 과거 OPC 매핑",
+            aliases=["Photo공정", "OPC", "CROPC", "MASK"],
+            match_fields=["diagnosis_job_name", "self_review"],
+            hint="2021~2024년 Photo공정 진단명과 OPC 업무 단서가 함께 있으면 DIC > OPC 후보를 우선한다.",
+            target_major_job="DIC",
+            target_sub_job="OPC",
+        ),
+    )
+    store.update_metadata(entry.id, enforcement_level="near_hard")
+    classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(),
+        knowledge_store=store,
+    )
+    diagnosis_context = DiagnosisContext(
+        year="2025",
+        emp_num="E0004",
+        row_count=1,
+        teams=[],
+        job_names=["Photo공정"],
+        categories=[],
+        evidence_rows=[],
+    )
+
+    def fail_stage1(self, context_json, candidate_pairs=None):
+        raise AssertionError("diagnosis job name should select the pair before stage1")
+
+    def fixed_stage2(self, context_json, candidates):
+        assert candidates == [taxonomy.rows[0]]
+        return FinalClassificationResult(
+            major_job="공정",
+            sub_job="Photo공정",
+            device="",
+            unit_job="Photo",
+            detail_job_1="",
+            detail_job_2="",
+            confidence=0.9,
+            needs_review=False,
+            reason="2025년은 과거 Photo공정 보정 범위 밖이므로 진단 직무명 유지",
+        )
+
+    classifier._run_stage1 = MethodType(fail_stage1, classifier)
+    classifier._run_stage2 = MethodType(fixed_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2025",
+            "team": "",
+            "emp_num": "E0004",
+            "name": "홍길동",
+            "self_review": "OPC 조건 확보, CROPC 적용, MASK 확보 업무 수행",
+        },
+        diagnosis_context=diagnosis_context,
+    )
+
+    assert result["중직무"] == "공정"
+    assert result["소직무"] == "Photo공정"
+    assert "diagnosis 직무명 우선 적용" in result["knowledge_priority_reason"]
+
+
 def test_diagnosis_team_does_not_force_major_or_device_without_job_name() -> None:
     classifier = _classifier(_taxonomy())
     diagnosis_context = DiagnosisContext(

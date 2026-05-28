@@ -85,6 +85,8 @@ class DiagnosisPriority:
 class KnowledgeHardPriority:
     rows: tuple[dict[str, str], ...] = ()
     reasons: tuple[str, ...] = ()
+    stage1_override_rows: tuple[dict[str, str], ...] = ()
+    stage1_override_reasons: tuple[str, ...] = ()
 
 
 class JsonlCache:
@@ -275,13 +277,28 @@ class OpenAICompatibleJobClassifier:
         knowledge_items: list[JobKnowledge],
     ) -> dict[str, Any]:
         applied_priority_reasons: list[str] = []
-        knowledge_priority = self._near_hard_knowledge_priority(knowledge_items)
+        knowledge_priority = self._near_hard_knowledge_priority(knowledge_items, context_json)
         knowledge_priority_reasons = list(knowledge_priority.reasons)
+        stage1_override_candidates, stage1_override_reason = self._knowledge_stage1_override_candidates(
+            knowledge_priority
+        )
 
         pair_candidates, pair_priority_reason = self._diagnosis_pair_candidates(diagnosis_priority)
         if pair_priority_reason:
-            applied_priority_reasons.append(pair_priority_reason)
-            if knowledge_priority.rows:
+            applied_stage1_override = False
+            if self._should_apply_stage1_knowledge_override(
+                pair_candidates,
+                stage1_override_candidates,
+            ):
+                pair_candidates = stage1_override_candidates
+                applied_stage1_override = True
+                applied_priority_reasons.append(
+                    f"{pair_priority_reason}; 준하드룰 지식이 과거 diagnosis 직무명 보정으로 stage1 후보를 대체"
+                )
+                knowledge_priority_reasons.append(stage1_override_reason)
+            else:
+                applied_priority_reasons.append(pair_priority_reason)
+            if knowledge_priority.rows and not applied_stage1_override:
                 knowledge_priority_reasons.append(
                     "diagnosis 직무명 우선 적용: 준하드룰 지식은 선택된 중직무/소직무 내부의 최종 후보 제한에만 사용"
                 )
@@ -539,10 +556,15 @@ class OpenAICompatibleJobClassifier:
     def _near_hard_knowledge_priority(
         self,
         knowledge_items: list[JobKnowledge],
+        context_json: str = "",
     ) -> KnowledgeHardPriority:
+        context_year, diagnosis_job_names = self._diagnosis_override_context(context_json)
         rows: list[dict[str, str]] = []
         reasons: list[str] = []
+        stage1_override_rows: list[dict[str, str]] = []
+        stage1_override_reasons: list[str] = []
         seen_rows: set[tuple[str, ...]] = set()
+        seen_stage1_override_rows: set[tuple[str, ...]] = set()
         for item in knowledge_items:
             if item.enforcement_level != "near_hard":
                 continue
@@ -558,16 +580,94 @@ class OpenAICompatibleJobClassifier:
             matched_rows = self._taxonomy_rows_matching(target)
             if not matched_rows:
                 continue
+            is_stage1_override = self._is_diagnosis_job_name_stage1_override(
+                item,
+                diagnosis_job_names=diagnosis_job_names,
+                context_year=context_year,
+            )
             for row in matched_rows:
                 key = tuple(normalize_cell(row.get(column, "")).casefold() for column in TAXONOMY_COLUMNS)
                 if key in seen_rows:
                     continue
                 seen_rows.add(key)
                 rows.append(row)
+                if is_stage1_override:
+                    if key in seen_stage1_override_rows:
+                        continue
+                    seen_stage1_override_rows.add(key)
+                    stage1_override_rows.append(row)
             reasons.append(
                 f"준하드룰 지식[{item.id}] '{item.title}' target 기준 후보 제한"
             )
-        return KnowledgeHardPriority(rows=tuple(rows), reasons=tuple(reasons))
+            if is_stage1_override:
+                stage1_override_reasons.append(
+                    f"준하드룰 지식[{item.id}] '{item.title}' diagnosis 직무명 보정으로 stage1 후보 제한"
+                )
+        return KnowledgeHardPriority(
+            rows=tuple(rows),
+            reasons=tuple(reasons),
+            stage1_override_rows=tuple(stage1_override_rows),
+            stage1_override_reasons=tuple(stage1_override_reasons),
+        )
+
+    def _is_diagnosis_job_name_stage1_override(
+        self,
+        item: JobKnowledge,
+        *,
+        diagnosis_job_names: list[str],
+        context_year: str,
+    ) -> bool:
+        return (
+            "diagnosis_job_name" in item.match_fields
+            and bool(normalize_cell(item.target_major_job))
+            and bool(normalize_cell(item.target_sub_job))
+            and self._knowledge_alias_matches_values(item, diagnosis_job_names)
+            and self._knowledge_year_allows(item, context_year)
+        )
+
+    def _diagnosis_override_context(self, context_json: str) -> tuple[str, list[str]]:
+        try:
+            context = json.loads(context_json) if context_json else {}
+        except json.JSONDecodeError:
+            return "", []
+        if not isinstance(context, dict):
+            return "", []
+        diagnosis_context = context.get("diagnosis_context")
+        if not isinstance(diagnosis_context, dict):
+            diagnosis_context = {}
+        raw_job_names = diagnosis_context.get("diagnosis_job_names", [])
+        if not isinstance(raw_job_names, list):
+            raw_job_names = []
+        job_names = [normalize_cell(value) for value in raw_job_names if normalize_cell(value)]
+        return normalize_cell(context.get("year", "")), job_names
+
+    def _knowledge_alias_matches_values(self, item: JobKnowledge, values: list[str]) -> bool:
+        if not values:
+            return False
+        for alias in item.aliases:
+            for value in values:
+                if _text_match_score(alias, value):
+                    return True
+        return False
+
+    def _knowledge_year_allows(self, item: JobKnowledge, context_year: str) -> bool:
+        year = _parse_year(context_year)
+        if year is None:
+            return True
+
+        text = " ".join(
+            [
+                item.raw_text,
+                item.title,
+                item.applies_when,
+                item.hint,
+            ]
+        )
+        ranges = _year_ranges(text)
+        years = _explicit_years(text)
+        if not ranges and not years:
+            return True
+        return any(start <= year <= end for start, end in ranges) or year in years
 
     def _taxonomy_rows_matching(self, specified: dict[str, str]) -> list[dict[str, str]]:
         rows: list[dict[str, str]] = []
@@ -596,6 +696,35 @@ class OpenAICompatibleJobClassifier:
             pairs.append({"중직무": row["중직무"], "소직무": row["소직무"]})
         reason = "준하드룰 지식 우선 적용: stage1 후보를 매칭 taxonomy row의 중직무/소직무로 제한"
         return pairs or self.taxonomy.pairs(), reason if pairs else ""
+
+    def _knowledge_stage1_override_candidates(
+        self,
+        knowledge_priority: KnowledgeHardPriority,
+    ) -> tuple[list[dict[str, str]], str]:
+        pairs: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for row in knowledge_priority.stage1_override_rows:
+            key = (
+                normalize_cell(row.get("중직무", "")).casefold(),
+                normalize_cell(row.get("소직무", "")).casefold(),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            pairs.append({"중직무": row["중직무"], "소직무": row["소직무"]})
+        reason = "; ".join(knowledge_priority.stage1_override_reasons)
+        return pairs, reason
+
+    def _should_apply_stage1_knowledge_override(
+        self,
+        current_pair_candidates: list[dict[str, str]],
+        override_pair_candidates: list[dict[str, str]],
+    ) -> bool:
+        if len(override_pair_candidates) != 1:
+            return False
+        if len(current_pair_candidates) != 1:
+            return True
+        return self._pair_key(current_pair_candidates[0]) != self._pair_key(override_pair_candidates[0])
 
     def _final_candidates_for_pair(
         self,
@@ -1126,7 +1255,7 @@ class OpenAICompatibleJobClassifier:
             "confidence_review_threshold": self.config.confidence_review_threshold,
             "previous_year_min_current_review_chars": self.config.previous_year_min_current_review_chars,
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
-            "near_hard_knowledge_policy": "diagnosis_job_name_precedence_v2",
+            "near_hard_knowledge_policy": "diagnosis_job_name_stage1_override_v3",
             "previous_year_prompt_policy": "fallback_only_when_current_review_short_v1",
             "self_review_pair_priority_policy": "taxonomy_major_sub_signal_match_v2",
             "stage2_pair_recovery_policy": "reason_major_sub_match_v2",
@@ -1264,3 +1393,29 @@ def _safe_float(value: object) -> float:
         return float(value)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _parse_year(value: object) -> int | None:
+    match = re.search(r"(?<!\d)(20\d{2})(?!\d)", normalize_cell(value))
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _year_ranges(text: str) -> list[tuple[int, int]]:
+    ranges: list[tuple[int, int]] = []
+    for match in re.finditer(
+        r"(?<!\d)(20\d{2})(?!\d)\s*년?\s*(?:~|-|부터|에서|to|through)\s*(20\d{2})(?!\d)",
+        normalize_cell(text),
+        flags=re.IGNORECASE,
+    ):
+        start = int(match.group(1))
+        end = int(match.group(2))
+        if start > end:
+            start, end = end, start
+        ranges.append((start, end))
+    return ranges
+
+
+def _explicit_years(text: str) -> set[int]:
+    return {int(match) for match in re.findall(r"(?<!\d)(20\d{2})(?!\d)", normalize_cell(text))}
