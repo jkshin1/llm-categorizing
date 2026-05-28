@@ -36,11 +36,27 @@ SUPPORTED_MATCH_FIELDS = {
     "employee_team",
     "previous_year",
 }
+TARGET_FIELD_NAMES = (
+    "target_major_job",
+    "target_sub_job",
+    "target_device",
+    "target_unit_job",
+    "target_detail_job_1",
+    "target_detail_job_2",
+)
 _THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think>\s*", flags=re.IGNORECASE | re.DOTALL)
+_ASCII_TOKEN_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z/_-]*")
+_ASCII_PHRASE_RE = re.compile(
+    r"(?<![0-9A-Za-z])"
+    r"[0-9A-Za-z][0-9A-Za-z/_-]*(?:\s+[0-9A-Za-z][0-9A-Za-z/_-]*)+"
+    r"(?![0-9A-Za-z])"
+)
 
 KNOWLEDGE_NORMALIZATION_SYSTEM_PROMPT = """너는 사내 직무 분류 지식을 정리하는 데이터 관리자다.
 사용자가 입력한 자연어 지식을 직무 분류기가 참고할 수 있는 구조화 JSON으로 바꾼다.
 입력에 없는 내용을 꾸며내지 말고, 확실하지 않은 target 계층은 빈 문자열로 둔다.
+사용자 입력의 약어, 코드, 팀명, 프로젝트명, 제품명은 원문 표기 그대로 보존한다.
+입력에 명시되지 않은 약어 풀어쓰기, 번역, 영문 full name, 의미 추정 alias를 생성하지 않는다.
 match_fields는 이 지식이 어떤 입력 근거에서 매칭될 때 가장 신뢰할 수 있는지 고른다.
 저장된 지식은 LLM 분류 판단의 soft hint로 쓰이며, 자동 보정 rule이 아니다.
 응답은 설명 문장 없이 JSON 객체 하나만 출력한다."""
@@ -64,6 +80,13 @@ target_* 필드는 위 taxonomy 참고값에 존재하는 값만 사용하라.
 [사용자 입력]
 {raw_text}
 {taxonomy_section}
+
+[약어/alias 보존 규칙]
+- 약어, 코드, 팀명, 프로젝트명, 제품명은 입력에 적힌 원문 표기 그대로 사용한다.
+- aliases에는 사용자 입력 문자열에 실제 등장한 표기만 넣는다.
+- 약어의 풀네임, 번역, 사전적 의미, 추정 확장명을 새 alias로 추가하지 않는다.
+- title, applies_when, hint에서도 약어를 임의로 풀어 쓰지 말고 입력 표현을 재사용한다.
+- target_* 필드는 사용자가 명시했거나 taxonomy 참고값이 입력 원문에 직접 등장할 때만 채운다.
 
 [knowledge_type 선택 기준]
 - glossary: 용어 설명
@@ -128,6 +151,114 @@ def _extract_json_object(text: str) -> dict[str, Any]:
 
 def _strip_thinking_blocks(text: str) -> str:
     return _THINK_BLOCK_RE.sub("", text)
+
+
+def _looks_like_abbreviation(value: str) -> bool:
+    compact = re.sub(r"[-_/]+", "", normalize_cell(value))
+    if len(compact) < 2:
+        return False
+    letters = [char for char in compact if char.isalpha()]
+    if not letters:
+        return False
+    uppercase_count = sum(1 for char in letters if char.isupper())
+    has_lowercase = any(char.islower() for char in letters)
+    has_digit = any(char.isdigit() for char in compact)
+    if uppercase_count == 0:
+        return False
+    if not has_lowercase:
+        return True
+    return has_digit or (uppercase_count >= 2 and len(compact) <= 12)
+
+
+def raw_abbreviation_terms(text: str, *, limit: int = 30) -> list[str]:
+    clean_text = normalize_cell(text)
+    terms: list[str] = []
+    seen: set[str] = set()
+
+    def add(value: str) -> None:
+        term = normalize_cell(value)
+        key = normalize_key(term)
+        if not term or key in seen:
+            return
+        seen.add(key)
+        terms.append(term)
+
+    for phrase in _ASCII_PHRASE_RE.findall(clean_text):
+        if any(_looks_like_abbreviation(token) for token in _ASCII_TOKEN_RE.findall(phrase)):
+            add(phrase)
+            if len(terms) >= limit:
+                return terms
+
+    for token in _ASCII_TOKEN_RE.findall(clean_text):
+        if _looks_like_abbreviation(token):
+            add(token)
+            if len(terms) >= limit:
+                return terms
+
+    return terms
+
+
+def _text_is_supported_by_raw_input(value: str, raw_text: str) -> bool:
+    clean_value = normalize_cell(value)
+    if not clean_value:
+        return False
+    raw_key = normalize_key(raw_text)
+    value_key = normalize_key(clean_value)
+    if value_key and value_key in raw_key:
+        return True
+    raw_compact = compact_knowledge_key(raw_text)
+    value_compact = compact_knowledge_key(clean_value)
+    return bool(value_compact and value_compact in raw_compact)
+
+
+def preserve_raw_knowledge_terms(raw_text: str, draft: "KnowledgeDraft") -> "KnowledgeDraft":
+    clean_raw_text = normalize_cell(raw_text)
+    if not clean_raw_text:
+        return draft
+
+    abbreviations = raw_abbreviation_terms(clean_raw_text)
+    has_abbreviation = bool(abbreviations)
+    aliases: list[str] = []
+    removed_aliases: list[str] = []
+    seen_aliases: set[str] = set()
+
+    def add_alias(value: str) -> None:
+        alias = normalize_cell(value)
+        key = normalize_key(alias)
+        if not alias or key in seen_aliases:
+            return
+        seen_aliases.add(key)
+        aliases.append(alias)
+
+    for alias in draft.aliases:
+        if _text_is_supported_by_raw_input(alias, clean_raw_text):
+            add_alias(alias)
+        else:
+            removed_aliases.append(alias)
+
+    for abbreviation in abbreviations:
+        add_alias(abbreviation)
+
+    updates: dict[str, object] = {"aliases": aliases[:30]}
+    errors = list(draft.validation_errors)
+    if removed_aliases:
+        removed_text = ", ".join(removed_aliases[:8])
+        errors.append(f"removed LLM-generated aliases not present in input: {removed_text}")
+    if has_abbreviation:
+        updates["title"] = clean_raw_text[:80]
+        updates["hint"] = clean_raw_text
+        updates["applies_when"] = "사용자 입력 지식과 현재 입력이 명확히 관련될 때"
+        for field_name in TARGET_FIELD_NAMES:
+            target_value = normalize_cell(getattr(draft, field_name))
+            if target_value and not _text_is_supported_by_raw_input(target_value, clean_raw_text):
+                updates[field_name] = ""
+                errors.append(
+                    f"cleared {field_name}='{target_value}' because abbreviation input did not mention it literally"
+                )
+
+    if errors:
+        updates["validation_errors"] = _dedupe_errors(errors)
+    return draft.model_copy(update=updates).with_fallbacks(clean_raw_text)
 
 
 class KnowledgeDraft(BaseModel):
@@ -1248,6 +1379,7 @@ class KnowledgeNormalizer:
         draft = draft.with_fallbacks(clean_text)
         if self.taxonomy:
             draft = validate_draft_against_taxonomy(draft, self.taxonomy)
+        draft = preserve_raw_knowledge_terms(clean_text, draft)
         return draft
 
 
@@ -1519,7 +1651,7 @@ def stronger_enforcement_level(current: str, candidate: str) -> str:
 
 def fallback_knowledge_draft(raw_text: str) -> KnowledgeDraft:
     clean_text = normalize_cell(raw_text)
-    aliases = []
+    aliases = raw_abbreviation_terms(clean_text, limit=12)
     for phrase in re.findall(r"[0-9A-Za-z]+(?:[\s\-_]+[0-9A-Za-z]+)+", clean_text):
         phrase = normalize_cell(phrase)
         if normalize_key(phrase) not in {normalize_key(item) for item in aliases}:

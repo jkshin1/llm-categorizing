@@ -7,8 +7,13 @@ from llm_categorizing.knowledge import (
     JobKnowledgeStore,
     KnowledgeSearchContext,
     KnowledgeDraft,
+    KNOWLEDGE_NORMALIZATION_SYSTEM_PROMPT,
     _extract_json_object,
     _knowledge_normalizer_extra_body,
+    fallback_knowledge_draft,
+    knowledge_normalization_user_prompt,
+    preserve_raw_knowledge_terms,
+    raw_abbreviation_terms,
     validate_draft_against_taxonomy,
 )
 from llm_categorizing.taxonomy import Taxonomy
@@ -259,6 +264,48 @@ def test_knowledge_json_extraction_ignores_thinking_block() -> None:
     )
 
     assert parsed == {"title": "Alpha", "aliases": ["A"]}
+
+
+def test_knowledge_prompt_forbids_arbitrary_abbreviation_expansion() -> None:
+    prompt = knowledge_normalization_user_prompt("TD는 중직무 소자 후보")
+
+    assert "약어" in KNOWLEDGE_NORMALIZATION_SYSTEM_PROMPT
+    assert "입력에 명시되지 않은 약어 풀어쓰기" in KNOWLEDGE_NORMALIZATION_SYSTEM_PROMPT
+    assert "aliases에는 사용자 입력 문자열에 실제 등장한 표기만 넣는다" in prompt
+    assert "약어의 풀네임" in prompt
+
+
+def test_preserve_raw_knowledge_terms_removes_llm_abbreviation_expansion() -> None:
+    draft = KnowledgeDraft(
+        title="TD Technology Development 지식",
+        aliases=["TD", "Technology Development"],
+        applies_when="Technology Development 조직명과 매칭될 때",
+        hint="TD는 Technology Development 의미로 보고 소자 후보를 검토한다.",
+        target_major_job="소자",
+        target_sub_job="Technology Development",
+        priority=80,
+        confidence=0.8,
+    )
+
+    preserved = preserve_raw_knowledge_terms("TD 조직명은 중직무 소자 후보를 우선 검토한다.", draft)
+
+    assert "TD" in preserved.aliases
+    assert "Technology Development" not in preserved.aliases
+    assert preserved.title == "TD 조직명은 중직무 소자 후보를 우선 검토한다."
+    assert preserved.hint == "TD 조직명은 중직무 소자 후보를 우선 검토한다."
+    assert preserved.applies_when == "사용자 입력 지식과 현재 입력이 명확히 관련될 때"
+    assert preserved.target_major_job == "소자"
+    assert preserved.target_sub_job == ""
+    assert any("removed LLM-generated aliases" in error for error in preserved.validation_errors)
+    assert any("cleared target_sub_job" in error for error in preserved.validation_errors)
+
+
+def test_fallback_knowledge_draft_keeps_short_abbreviation_alias() -> None:
+    draft = fallback_knowledge_draft("TD 조직명은 중직무 소자 후보를 우선 검토한다.")
+
+    assert "TD" in draft.aliases
+    assert raw_abbreviation_terms("M0C ETCH와 TD") == ["M0C ETCH", "M0C", "ETCH", "TD"]
+    assert raw_abbreviation_terms("2025년 기준") == []
 
 
 def test_classifier_includes_retrieved_knowledge_in_hints(tmp_path) -> None:
