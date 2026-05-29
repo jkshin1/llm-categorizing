@@ -290,36 +290,38 @@ class OpenAICompatibleJobClassifier:
         review_pair_candidates, review_pair_reason = self._review_pair_candidates(context_json)
         pair_candidates, pair_priority_reason = self._diagnosis_pair_candidates(diagnosis_priority)
         if pair_priority_reason:
-            review_override_candidates, review_override_reason = self._self_review_pair_override_candidates(
+            applied_stage1_override = False
+            review_override_reason = ""
+            if self._should_apply_stage1_knowledge_override(
                 pair_candidates,
-                review_pair_candidates,
-                review_pair_reason,
-            )
+                stage1_override_candidates,
+            ):
+                pair_candidates = stage1_override_candidates
+                applied_stage1_override = True
+                applied_priority_reasons.append(
+                    f"{pair_priority_reason}; 준하드룰 지식이 과거 diagnosis 직무명/team 보정 또는 self_review 보정으로 stage1 후보를 대체"
+                )
+                knowledge_priority_reasons.append(stage1_override_reason)
+            else:
+                review_override_candidates, review_override_reason = self._self_review_pair_override_candidates(
+                    pair_candidates,
+                    review_pair_candidates,
+                    review_pair_reason,
+                )
+                if review_override_reason:
+                    pair_candidates = review_override_candidates
+                    applied_priority_reasons.append(f"{pair_priority_reason}; {review_override_reason}")
+                else:
+                    applied_priority_reasons.append(pair_priority_reason)
             if review_override_reason:
-                pair_candidates = review_override_candidates
-                applied_priority_reasons.append(f"{pair_priority_reason}; {review_override_reason}")
                 if knowledge_priority.rows:
                     knowledge_priority_reasons.append(
                         "self_review 직접 직무 단서 우선 적용: 준하드룰 지식은 선택된 중직무/소직무 내부의 최종 후보 제한에만 사용"
                     )
-            else:
-                applied_stage1_override = False
-                if self._should_apply_stage1_knowledge_override(
-                    pair_candidates,
-                    stage1_override_candidates,
-                ):
-                    pair_candidates = stage1_override_candidates
-                    applied_stage1_override = True
-                    applied_priority_reasons.append(
-                        f"{pair_priority_reason}; 준하드룰 지식이 과거 diagnosis 직무명/team 보정으로 stage1 후보를 대체"
-                    )
-                    knowledge_priority_reasons.append(stage1_override_reason)
-                else:
-                    applied_priority_reasons.append(pair_priority_reason)
-                if knowledge_priority.rows and not applied_stage1_override:
-                    knowledge_priority_reasons.append(
-                        "diagnosis 직무명 우선 적용: 준하드룰 지식은 선택된 중직무/소직무 내부의 최종 후보 제한에만 사용"
-                    )
+            if knowledge_priority.rows and not applied_stage1_override and not review_override_reason:
+                knowledge_priority_reasons.append(
+                    "diagnosis 직무명 우선 적용: 준하드룰 지식은 선택된 중직무/소직무 내부의 최종 후보 제한에만 사용"
+                )
         else:
             if review_pair_reason:
                 pair_candidates = review_pair_candidates
@@ -576,7 +578,7 @@ class OpenAICompatibleJobClassifier:
         context_json: str = "",
         diagnosis_priority: DiagnosisPriority | None = None,
     ) -> KnowledgeHardPriority:
-        context_year, diagnosis_job_names, diagnosis_teams = self._diagnosis_override_context(context_json)
+        context_year, self_review, diagnosis_job_names, diagnosis_teams = self._diagnosis_override_context(context_json)
         rows: list[dict[str, str]] = []
         reasons: list[str] = []
         stage1_override_rows: list[dict[str, str]] = []
@@ -602,6 +604,7 @@ class OpenAICompatibleJobClassifier:
                 item,
                 diagnosis_job_names=diagnosis_job_names,
                 diagnosis_teams=diagnosis_teams,
+                self_review=self_review,
                 context_year=context_year,
                 diagnosis_priority=diagnosis_priority,
             )
@@ -636,6 +639,7 @@ class OpenAICompatibleJobClassifier:
         *,
         diagnosis_job_names: list[str],
         diagnosis_teams: list[str],
+        self_review: str,
         context_year: str,
         diagnosis_priority: DiagnosisPriority | None = None,
     ) -> bool:
@@ -644,12 +648,17 @@ class OpenAICompatibleJobClassifier:
             and self._knowledge_alias_matches_values(item, diagnosis_job_names)
         )
         team_match = (
-            "diagnosis_team" in item.match_fields
-            and self._knowledge_team_matches_item(item, diagnosis_teams)
+            self._knowledge_team_matches_item(item, diagnosis_teams)
+            and self._knowledge_can_use_diagnosis_team_for_stage1(item)
+        )
+        self_review_match = (
+            self._knowledge_can_use_self_review_for_stage1(item)
+            and self._knowledge_self_review_matches_item(item, self_review)
         )
         if (
             team_match
             and not job_name_match
+            and not self_review_match
             and self._team_override_conflicts_with_current_diagnosis(item, diagnosis_priority)
             and not self._team_override_explicitly_ignores_diagnosis_job_name(item)
             and not self._team_override_has_lower_level_diagnosis_support(item, diagnosis_job_names)
@@ -658,7 +667,7 @@ class OpenAICompatibleJobClassifier:
         return (
             bool(normalize_cell(item.target_major_job))
             and bool(normalize_cell(item.target_sub_job))
-            and (job_name_match or team_match)
+            and (job_name_match or team_match or self_review_match)
             and self._knowledge_year_allows(item, context_year)
         )
 
@@ -731,6 +740,72 @@ class OpenAICompatibleJobClassifier:
             ]
         )
 
+    def _knowledge_can_use_diagnosis_team_for_stage1(self, item: JobKnowledge) -> bool:
+        if "diagnosis_team" in item.match_fields:
+            return True
+        text = normalize_cell(
+            " ".join([item.raw_text, item.title, item.applies_when, item.hint])
+        ).casefold()
+        compact = _compact_text(text)
+        return any(
+            term in text
+            for term in [
+                "diagnosis team",
+                "diagnosis_team",
+                "diagnosis_context",
+                "diagnosis context",
+                "진단 team",
+                "진단팀",
+                "진단 조직",
+                "진단 맥락",
+                "team 명",
+                "team명",
+                "팀 명",
+                "팀명",
+            ]
+        ) or any(
+            term in compact
+            for term in [
+                "diagnosisteam",
+                "diagnosiscontext",
+                "진단team",
+                "진단팀",
+                "진단조직",
+                "진단맥락",
+                "team명",
+                "팀명",
+            ]
+        )
+
+    def _knowledge_can_use_self_review_for_stage1(self, item: JobKnowledge) -> bool:
+        fields = set(item.match_fields)
+        if fields and fields != {"self_review"}:
+            return False
+        text = normalize_cell(
+            " ".join([item.raw_text, item.title, item.applies_when, item.hint])
+        ).casefold()
+        compact = _compact_text(text)
+        return "self_review" in fields or any(
+            term in text
+            for term in [
+                "self_review",
+                "self review",
+                "성과리뷰",
+                "현재 업무",
+                "현재 수행",
+                "수행 업무",
+            ]
+        ) or any(
+            term in compact
+            for term in [
+                "selfreview",
+                "성과리뷰",
+                "현재업무",
+                "현재수행",
+                "수행업무",
+            ]
+        )
+
     def _team_override_has_lower_level_diagnosis_support(
         self,
         item: JobKnowledge,
@@ -762,13 +837,13 @@ class OpenAICompatibleJobClassifier:
                     return True
         return False
 
-    def _diagnosis_override_context(self, context_json: str) -> tuple[str, list[str], list[str]]:
+    def _diagnosis_override_context(self, context_json: str) -> tuple[str, str, list[str], list[str]]:
         try:
             context = json.loads(context_json) if context_json else {}
         except json.JSONDecodeError:
-            return "", [], []
+            return "", "", [], []
         if not isinstance(context, dict):
-            return "", [], []
+            return "", "", [], []
         diagnosis_context = context.get("diagnosis_context")
         if not isinstance(diagnosis_context, dict):
             diagnosis_context = {}
@@ -780,7 +855,7 @@ class OpenAICompatibleJobClassifier:
             raw_teams = []
         job_names = [normalize_cell(value) for value in raw_job_names if normalize_cell(value)]
         teams = [normalize_cell(value) for value in raw_teams if normalize_cell(value)]
-        return normalize_cell(context.get("year", "")), job_names, teams
+        return normalize_cell(context.get("year", "")), normalize_cell(context.get("self_review", "")), job_names, teams
 
     def _knowledge_alias_matches_values(self, item: JobKnowledge, values: list[str]) -> bool:
         if not values:
@@ -807,6 +882,22 @@ class OpenAICompatibleJobClassifier:
             for team in teams
             if normalize_cell(alias) and normalize_cell(team)
         )
+
+    def _knowledge_self_review_matches_item(self, item: JobKnowledge, self_review: str) -> bool:
+        review = normalize_cell(self_review)
+        target_sub_job = normalize_cell(item.target_sub_job)
+        if not review or not _is_distinctive_stage1_signal(target_sub_job):
+            return False
+        target_compact = _compact_text(target_sub_job)
+        aliases = [
+            alias
+            for alias in item.aliases
+            if _compact_text(alias) == target_compact
+        ]
+        for value in [target_sub_job, *aliases]:
+            if _text_match_score(value, review) > 0:
+                return True
+        return False
 
     def _knowledge_alias_matches_team(self, item: JobKnowledge, teams: list[str]) -> bool:
         if not teams:
@@ -1478,7 +1569,7 @@ class OpenAICompatibleJobClassifier:
             "confidence_review_threshold": self.config.confidence_review_threshold,
             "previous_year_min_current_review_chars": self.config.previous_year_min_current_review_chars,
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
-            "near_hard_knowledge_policy": "diagnosis_input_stage1_override_team_v9",
+            "near_hard_knowledge_policy": "diagnosis_input_stage1_override_team_self_review_v11",
             "previous_year_prompt_policy": "fallback_only_when_current_review_short_v1",
             "self_review_pair_priority_policy": "taxonomy_major_sub_signal_match_v3",
             "diagnosis_self_review_conflict_policy": "self_review_direct_pair_overrides_diagnosis_v1",
@@ -1583,6 +1674,30 @@ def _sub_job_signal_aliases(sub_job: object) -> list[str]:
         seen.add(key)
         aliases.append(alias)
     return aliases
+
+
+def _is_distinctive_stage1_signal(value: object) -> bool:
+    compact = _compact_text(value)
+    if not compact:
+        return False
+    generic_values = {
+        "common",
+        "device",
+        "job",
+        "model",
+        "modeling",
+        "process",
+        "공정",
+        "공통",
+        "모델",
+        "업무",
+        "직무",
+    }
+    if compact in generic_values:
+        return False
+    if compact.isascii() and len(compact) < 3:
+        return False
+    return len(compact) >= 2
 
 
 def _text_match_score(target: object, source: object) -> int:

@@ -904,6 +904,167 @@ def test_explicit_dtco_team_rule_ignores_conflicting_diagnosis_job_name(tmp_path
     assert "diagnosis 직무명/team 보정으로 stage1 후보 제한" in reason
 
 
+def test_dtco_team_rule_can_stage1_override_even_if_match_field_was_not_normalized(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "DIC",
+                "소직무": "DTCO",
+                "Device": "NAND",
+                "단위 직무": "회로 최적화",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "DIC",
+                "소직무": "SPICE Modeling",
+                "Device": "공통",
+                "단위 직무": "SPICE Modeling",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "diagnosis_context의 team 명에 DTCO가 포함되면 diagnosis_job_names는 절대 참고하지 말고 중직무 DIC, 소직무 DTCO를 우선판단한다.",
+        KnowledgeDraft(
+            title="DTCO diagnosis context rule",
+            aliases=["NoAlias"],
+            match_fields=["self_review"],
+            hint="진단 맥락의 team명에 DTCO가 있으면 DIC > DTCO를 우선한다.",
+            target_major_job="DIC",
+            target_sub_job="DTCO",
+        ),
+    )
+    updated = store.update_metadata(entry.id, enforcement_level="near_hard")
+    assert updated is not None
+    classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(),
+        knowledge_store=store,
+    )
+    diagnosis_context = DiagnosisContext(
+        year="2025",
+        emp_num="E0010",
+        row_count=1,
+        teams=["Device Tech Solution > DTCO"],
+        job_names=["SPICE Modeling"],
+        categories=[],
+        evidence_rows=[],
+    )
+    context_json = (
+        '{"year":"2025","diagnosis_context":'
+        '{"diagnosis_teams":["Device Tech Solution > DTCO"],'
+        '"diagnosis_job_names":["SPICE Modeling"]}}'
+    )
+
+    priority = classifier._near_hard_knowledge_priority(
+        [updated],
+        context_json,
+        diagnosis_priority=classifier._diagnosis_priority(diagnosis_context),
+    )
+    pair_candidates, reason = classifier._knowledge_stage1_override_candidates(priority)
+
+    assert pair_candidates == [{"중직무": "DIC", "소직무": "DTCO"}]
+    assert "diagnosis 직무명/team 보정으로 stage1 후보 제한" in reason
+
+
+def test_dtco_self_review_near_hard_rule_overrides_spice_modeling_diagnosis_pair(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "DIC",
+                "소직무": "DTCO",
+                "Device": "NAND",
+                "단위 직무": "회로 최적화",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "DIC",
+                "소직무": "SPICE Modeling",
+                "Device": "공통",
+                "단위 직무": "SPICE Modeling",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "DTCO는 Design-Technology Co-Optimization을 의미하며 현재 taxonomy 기준 중직무 DIC, 소직무 DTCO에 해당한다.",
+        KnowledgeDraft(
+            title="DTCO self_review mapping",
+            aliases=["DTCO"],
+            match_fields=["self_review"],
+            hint="self_review에 DTCO가 명확하면 DIC > DTCO 후보를 우선한다.",
+            target_major_job="DIC",
+            target_sub_job="DTCO",
+        ),
+    )
+    store.update_metadata(entry.id, enforcement_level="near_hard")
+    classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(),
+        knowledge_store=store,
+    )
+    diagnosis_context = DiagnosisContext(
+        year="2025",
+        emp_num="E0011",
+        row_count=1,
+        teams=[],
+        job_names=["SPICE Modeling"],
+        categories=[],
+        evidence_rows=[],
+    )
+
+    def fail_stage1(self, context_json, candidate_pairs=None):
+        raise AssertionError("DTCO self_review near-hard rule should select the pair before stage1")
+
+    def fixed_stage2(self, context_json, candidates):
+        assert {row["소직무"] for row in candidates} == {"DTCO"}
+        return FinalClassificationResult(
+            major_job="DIC",
+            sub_job="DTCO",
+            device="NAND",
+            unit_job="회로 최적화",
+            detail_job_1="",
+            detail_job_2="",
+            confidence=0.94,
+            needs_review=False,
+            reason="self_review가 DTCO를 명확히 언급해 SPICE Modeling 진단 직무명보다 우선",
+        )
+
+    classifier._run_stage1 = MethodType(fail_stage1, classifier)
+    classifier._run_stage2 = MethodType(fixed_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2025",
+            "team": "",
+            "emp_num": "E0011",
+            "name": "홍길동",
+            "self_review": "DIC SPICE Modeling 기반 모델 검증과 DTCO 회로 최적화 업무를 수행",
+        },
+        diagnosis_context=diagnosis_context,
+    )
+
+    assert result["중직무"] == "DIC"
+    assert result["소직무"] == "DTCO"
+    assert "diagnosis 직무명/team 보정 또는 self_review 보정으로 stage1 후보를 대체" in result["diagnosis_priority_reason"]
+
+
 def test_near_hard_legacy_mapping_requires_matching_diagnosis_job_name(tmp_path) -> None:
     taxonomy = Taxonomy.from_rows(
         [
