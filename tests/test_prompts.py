@@ -11,13 +11,15 @@ from llm_categorizing.prompts import (
 
 
 def test_system_prompt_includes_future_technology_research_context() -> None:
-    assert PROMPT_VERSION == "job-classification-v16-process-device-signal-precedence"
+    assert PROMPT_VERSION == "job-classification-v18-dic-optional-unit"
     assert "SK하이닉스 미래기술연구원" in SYSTEM_PROMPT
     assert "DRAM/NAND Flash 혁신" in ORGANIZATION_CONTEXT
     assert "DRAM/NAND 선행 제품 개발" in ORGANIZATION_CONTEXT
     assert "soft context" in ORGANIZATION_CONTEXT
     assert "조직명만으로 Device, 중직무, 소직무를 확정하지 않는다" in ORGANIZATION_CONTEXT
     assert "준하드룰" in SYSTEM_PROMPT
+    assert "현재 self_review와 명확히 충돌하면 self_review" in SYSTEM_PROMPT
+    assert "DIC는 단위 직무까지 항상 채우지 않는다" in SYSTEM_PROMPT
 
 
 def test_prompts_prioritize_etch_process_work_over_device_words() -> None:
@@ -28,6 +30,13 @@ def test_prompts_prioritize_etch_process_work_over_device_words() -> None:
     assert "WT" in PROCESS_DEVICE_SIGNAL_RULES
     assert PROCESS_DEVICE_SIGNAL_RULES in DECISION_RULES
     assert "Etch module 개선" in SYSTEM_PROMPT
+
+
+def test_prompts_allow_dic_blank_unit_when_unit_signal_is_weak() -> None:
+    assert "DIC 단위 직무 선택 규칙" in DECISION_RULES
+    assert "필수 확정 범위가 중직무, 소직무, Device까지" in DECISION_RULES
+    assert "단위 직무 근거가 약하면" in DECISION_RULES
+    assert "억지로 선택하지 않는다" in DECISION_RULES
 
 
 def test_stage_prompts_use_stable_json_boundaries_and_output_rules() -> None:

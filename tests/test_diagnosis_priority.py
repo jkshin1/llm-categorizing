@@ -52,6 +52,22 @@ def _taxonomy() -> Taxonomy:
     )
 
 
+def _optional_dic_unit_candidate(row: dict[str, str]) -> dict[str, str]:
+    return {
+        "중직무": row["중직무"],
+        "소직무": row["소직무"],
+        "Device": row["Device"],
+        "단위 직무": "",
+        "세부 직무1": "",
+        "세부 직무2": "",
+    }
+
+
+def _assert_dic_unit_optional(candidates: list[dict[str, str]], row: dict[str, str]) -> None:
+    assert _optional_dic_unit_candidate(row) in candidates
+    assert row in candidates
+
+
 def test_diagnosis_priority_infers_pair_from_diagnosis_job_name_only() -> None:
     classifier = _classifier(_taxonomy())
     diagnosis_context = DiagnosisContext(
@@ -226,6 +242,140 @@ def test_diagnosis_single_pair_skips_stage1_but_keeps_all_devices_for_llm() -> N
     assert "diagnosis 우선 적용" in result["diagnosis_priority_reason"]
 
 
+def test_dic_stage2_can_leave_unit_job_blank_when_review_lacks_unit_signal() -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "DIC",
+                "소직무": "OPC",
+                "Device": "DRAM",
+                "단위 직무": "OPC Technology",
+                "세부 직무1": "Mask",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "DIC",
+                "소직무": "OPC",
+                "Device": "NAND",
+                "단위 직무": "OPC Technology",
+                "세부 직무1": "Mask",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    classifier = _classifier(taxonomy)
+
+    def fail_stage1(self, context_json, candidate_pairs=None):
+        raise AssertionError("self_review direct DIC pair should select the pair before stage1")
+
+    def fixed_stage2(self, context_json, candidates):
+        blank_candidate = _optional_dic_unit_candidate(taxonomy.rows[0])
+        assert candidates[0] == blank_candidate
+        _assert_dic_unit_optional(candidates, taxonomy.rows[0])
+        _assert_dic_unit_optional(candidates, taxonomy.rows[1])
+        return FinalClassificationResult(
+            major_job="DIC",
+            sub_job="OPC",
+            device="DRAM",
+            unit_job="",
+            detail_job_1="",
+            detail_job_2="",
+            confidence=0.86,
+            needs_review=False,
+            reason="DIC OPC와 DRAM 근거는 명확하지만 단위 직무 근거는 불명확함",
+        )
+
+    classifier._run_stage1 = MethodType(fail_stage1, classifier)
+    classifier._run_stage2 = MethodType(fixed_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2025",
+            "team": "",
+            "emp_num": "E0008",
+            "name": "홍길동",
+            "self_review": "DIC OPC 업무를 수행하며 DRAM 제품 대응과 부서 과제를 지원",
+        }
+    )
+
+    assert result["중직무"] == "DIC"
+    assert result["소직무"] == "OPC"
+    assert result["Device"] == "DRAM"
+    assert result["단위 직무"] == ""
+    assert result["세부 직무1"] == ""
+    assert result["needs_review"] is False
+
+
+def test_self_review_direct_pair_overrides_stale_diagnosis_pair() -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "공정",
+                "소직무": "Etch공정",
+                "Device": "DRAM",
+                "단위 직무": "Chamber",
+                "세부 직무1": "Clean",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "DIC",
+                "소직무": "OPC",
+                "Device": "DRAM",
+                "단위 직무": "OPC Technology",
+                "세부 직무1": "Mask",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    classifier = _classifier(taxonomy)
+    diagnosis_context = DiagnosisContext(
+        year="2025",
+        emp_num="E0004",
+        row_count=1,
+        teams=["DRAM공정 > DPC"],
+        job_names=["Etch공정"],
+        categories=[],
+        evidence_rows=[],
+    )
+
+    def fail_stage1(self, context_json, candidate_pairs=None):
+        raise AssertionError("self_review direct conflict should select the pair before stage1")
+
+    def fixed_stage2(self, context_json, candidates):
+        _assert_dic_unit_optional(candidates, taxonomy.rows[1])
+        return FinalClassificationResult(
+            major_job="DIC",
+            sub_job="OPC",
+            device="DRAM",
+            unit_job="OPC Technology",
+            detail_job_1="Mask",
+            detail_job_2="",
+            confidence=0.94,
+            needs_review=False,
+            reason="self_review가 DIC OPC 업무를 명시하므로 과거 Etch공정 진단보다 우선",
+        )
+
+    classifier._run_stage1 = MethodType(fail_stage1, classifier)
+    classifier._run_stage2 = MethodType(fixed_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2025",
+            "team": "",
+            "emp_num": "E0004",
+            "name": "홍길동",
+            "self_review": "DIC OPC 업무를 담당하며 OPC rule deck, mask 검증, OPC 조건 최적화를 수행",
+        },
+        diagnosis_context=diagnosis_context,
+    )
+
+    assert result["중직무"] == "DIC"
+    assert result["소직무"] == "OPC"
+    assert "diagnosis 우선 적용" in result["diagnosis_priority_reason"]
+    assert "self_review 직접 직무 단서 우선 적용" in result["diagnosis_priority_reason"]
+    assert "명확히 충돌" in result["diagnosis_priority_reason"]
+
+
 def test_diagnosis_job_name_takes_precedence_over_conflicting_near_hard_knowledge(tmp_path) -> None:
     taxonomy = Taxonomy.from_rows(
         [
@@ -375,7 +525,7 @@ def test_near_hard_diagnosis_job_name_mapping_overrides_legacy_diagnosis_pair(tm
         raise AssertionError("near-hard legacy mapping should select the pair before stage1")
 
     def fixed_stage2(self, context_json, candidates):
-        assert candidates == [taxonomy.rows[1]]
+        _assert_dic_unit_optional(candidates, taxonomy.rows[1])
         return FinalClassificationResult(
             major_job="DIC",
             sub_job="OPC",
@@ -466,7 +616,7 @@ def test_near_hard_diagnosis_team_mapping_overrides_legacy_diagnosis_pair(tmp_pa
         raise AssertionError("near-hard team mapping should select the pair before stage1")
 
     def fixed_stage2(self, context_json, candidates):
-        assert candidates == [taxonomy.rows[1]]
+        _assert_dic_unit_optional(candidates, taxonomy.rows[1])
         return FinalClassificationResult(
             major_job="DIC",
             sub_job="OPC",
@@ -557,7 +707,7 @@ def test_near_hard_diagnosis_team_mapping_does_not_override_current_dic_sub_job(
         raise AssertionError("diagnosis job name should keep the SPICE Modeling pair before stage1")
 
     def fixed_stage2(self, context_json, candidates):
-        assert candidates == [taxonomy.rows[0]]
+        _assert_dic_unit_optional(candidates, taxonomy.rows[0])
         return FinalClassificationResult(
             major_job="DIC",
             sub_job="SPICE Modeling",
@@ -739,7 +889,7 @@ def test_near_hard_legacy_mapping_does_not_use_partial_diagnosis_job_name_alias(
         raise AssertionError("diagnosis job name should select the DTCO pair before stage1")
 
     def fixed_stage2(self, context_json, candidates):
-        assert candidates == [taxonomy.rows[0]]
+        _assert_dic_unit_optional(candidates, taxonomy.rows[0])
         return FinalClassificationResult(
             major_job="DIC",
             sub_job="DTCO",

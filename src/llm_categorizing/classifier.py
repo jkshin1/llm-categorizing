@@ -287,27 +287,40 @@ class OpenAICompatibleJobClassifier:
             knowledge_priority
         )
 
+        review_pair_candidates, review_pair_reason = self._review_pair_candidates(context_json)
         pair_candidates, pair_priority_reason = self._diagnosis_pair_candidates(diagnosis_priority)
         if pair_priority_reason:
-            applied_stage1_override = False
-            if self._should_apply_stage1_knowledge_override(
+            review_override_candidates, review_override_reason = self._self_review_pair_override_candidates(
                 pair_candidates,
-                stage1_override_candidates,
-            ):
-                pair_candidates = stage1_override_candidates
-                applied_stage1_override = True
-                applied_priority_reasons.append(
-                    f"{pair_priority_reason}; 준하드룰 지식이 과거 diagnosis 직무명/team 보정으로 stage1 후보를 대체"
-                )
-                knowledge_priority_reasons.append(stage1_override_reason)
+                review_pair_candidates,
+                review_pair_reason,
+            )
+            if review_override_reason:
+                pair_candidates = review_override_candidates
+                applied_priority_reasons.append(f"{pair_priority_reason}; {review_override_reason}")
+                if knowledge_priority.rows:
+                    knowledge_priority_reasons.append(
+                        "self_review 직접 직무 단서 우선 적용: 준하드룰 지식은 선택된 중직무/소직무 내부의 최종 후보 제한에만 사용"
+                    )
             else:
-                applied_priority_reasons.append(pair_priority_reason)
-            if knowledge_priority.rows and not applied_stage1_override:
-                knowledge_priority_reasons.append(
-                    "diagnosis 직무명 우선 적용: 준하드룰 지식은 선택된 중직무/소직무 내부의 최종 후보 제한에만 사용"
-                )
+                applied_stage1_override = False
+                if self._should_apply_stage1_knowledge_override(
+                    pair_candidates,
+                    stage1_override_candidates,
+                ):
+                    pair_candidates = stage1_override_candidates
+                    applied_stage1_override = True
+                    applied_priority_reasons.append(
+                        f"{pair_priority_reason}; 준하드룰 지식이 과거 diagnosis 직무명/team 보정으로 stage1 후보를 대체"
+                    )
+                    knowledge_priority_reasons.append(stage1_override_reason)
+                else:
+                    applied_priority_reasons.append(pair_priority_reason)
+                if knowledge_priority.rows and not applied_stage1_override:
+                    knowledge_priority_reasons.append(
+                        "diagnosis 직무명 우선 적용: 준하드룰 지식은 선택된 중직무/소직무 내부의 최종 후보 제한에만 사용"
+                    )
         else:
-            review_pair_candidates, review_pair_reason = self._review_pair_candidates(context_json)
             if review_pair_reason:
                 pair_candidates = review_pair_candidates
                 applied_priority_reasons.append(review_pair_reason)
@@ -776,6 +789,32 @@ class OpenAICompatibleJobClassifier:
             return True
         return self._pair_key(current_pair_candidates[0]) != self._pair_key(override_pair_candidates[0])
 
+    def _self_review_pair_override_candidates(
+        self,
+        diagnosis_pair_candidates: list[dict[str, str]],
+        review_pair_candidates: list[dict[str, str]],
+        review_pair_reason: str,
+    ) -> tuple[list[dict[str, str]], str]:
+        if not review_pair_reason or len(review_pair_candidates) != 1:
+            return diagnosis_pair_candidates, ""
+
+        review_pair = dict(review_pair_candidates[0])
+        review_key = self._pair_key(review_pair)
+        diagnosis_keys = {self._pair_key(pair) for pair in diagnosis_pair_candidates}
+        if len(diagnosis_keys) == 1 and review_key in diagnosis_keys:
+            return diagnosis_pair_candidates, ""
+
+        if review_key in diagnosis_keys:
+            return (
+                [review_pair],
+                f"{review_pair_reason}; diagnosis 후보가 여러 개라 self_review 직접 직무 단서로 단일 pair 선택",
+            )
+
+        return (
+            [review_pair],
+            f"{review_pair_reason}; diagnosis 우선 후보와 명확히 충돌해 과거 diagnosis보다 self_review 기준을 우선 적용",
+        )
+
     def _final_candidates_for_pair(
         self,
         pair: dict[str, str],
@@ -783,7 +822,7 @@ class OpenAICompatibleJobClassifier:
     ) -> list[dict[str, str]]:
         candidates = self.taxonomy.children_for_pair(pair["중직무"], pair["소직무"])
         if not knowledge_priority.rows:
-            return candidates
+            return self._with_optional_dic_unit_candidates(candidates)
         pair_key = (
             normalize_cell(pair.get("중직무", "")).casefold(),
             normalize_cell(pair.get("소직무", "")).casefold(),
@@ -797,7 +836,37 @@ class OpenAICompatibleJobClassifier:
             )
             == pair_key
         ]
-        return filtered or candidates
+        return self._with_optional_dic_unit_candidates(filtered or candidates)
+
+    def _with_optional_dic_unit_candidates(
+        self,
+        candidates: list[dict[str, str]],
+    ) -> list[dict[str, str]]:
+        optional_rows: list[dict[str, str]] = []
+        existing_keys = {
+            tuple(normalize_cell(row.get(column, "")).casefold() for column in TAXONOMY_COLUMNS)
+            for row in candidates
+        }
+        seen_optional_keys: set[tuple[str, ...]] = set()
+        for row in candidates:
+            if normalize_cell(row.get("중직무", "")).casefold() != "dic":
+                continue
+            optional = {
+                "중직무": row.get("중직무", ""),
+                "소직무": row.get("소직무", ""),
+                "Device": row.get("Device", ""),
+                "단위 직무": "",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            }
+            key = tuple(normalize_cell(optional.get(column, "")).casefold() for column in TAXONOMY_COLUMNS)
+            if key in existing_keys or key in seen_optional_keys:
+                continue
+            seen_optional_keys.add(key)
+            optional_rows.append(optional)
+        if not optional_rows:
+            return candidates
+        return optional_rows + candidates
 
     def _diagnosis_priority(
         self,
@@ -1307,8 +1376,10 @@ class OpenAICompatibleJobClassifier:
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
             "near_hard_knowledge_policy": "diagnosis_input_stage1_override_team_v7",
             "previous_year_prompt_policy": "fallback_only_when_current_review_short_v1",
-            "self_review_pair_priority_policy": "taxonomy_major_sub_signal_match_v2",
+            "self_review_pair_priority_policy": "taxonomy_major_sub_signal_match_v3",
+            "diagnosis_self_review_conflict_policy": "self_review_direct_pair_overrides_diagnosis_v1",
             "stage2_pair_recovery_policy": "reason_major_sub_match_v2",
+            "dic_optional_unit_candidate_policy": "blank_unit_per_pair_device_v1",
             "knowledge_review_scope": self.config.knowledge_review_scope,
             "prompt_version": PROMPT_VERSION,
         }
