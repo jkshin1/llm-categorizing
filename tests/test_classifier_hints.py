@@ -330,7 +330,7 @@ def test_stage2_reason_can_recover_available_pair_after_stage1_mispick() -> None
             "team": "",
             "emp_num": "E0001",
             "name": "홍길동",
-            "self_review": "M0C ETCH Set Up, Chamber Capa, APC CD 개선",
+            "self_review": "M0C Set Up, Chamber Capa, APC CD 개선",
         }
     )
 

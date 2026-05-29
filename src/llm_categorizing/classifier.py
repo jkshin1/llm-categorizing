@@ -990,7 +990,23 @@ class OpenAICompatibleJobClassifier:
         review_pair_candidates: list[dict[str, str]],
         review_pair_reason: str,
     ) -> tuple[list[dict[str, str]], str]:
-        if not review_pair_reason or len(review_pair_candidates) != 1:
+        if not review_pair_reason:
+            return diagnosis_pair_candidates, ""
+
+        sub_job_only = _is_sub_job_only_review_reason(review_pair_reason)
+        if sub_job_only and len(review_pair_candidates) != 1 and len(diagnosis_pair_candidates) == 1:
+            diagnosis_major_key = normalize_cell(
+                diagnosis_pair_candidates[0].get("중직무", "")
+            ).casefold()
+            same_major_pairs = [
+                pair
+                for pair in review_pair_candidates
+                if normalize_cell(pair.get("중직무", "")).casefold() == diagnosis_major_key
+            ]
+            if len(same_major_pairs) == 1:
+                review_pair_candidates = [same_major_pairs[0]]
+
+        if len(review_pair_candidates) != 1:
             return diagnosis_pair_candidates, ""
 
         review_pair = dict(review_pair_candidates[0])
@@ -998,6 +1014,18 @@ class OpenAICompatibleJobClassifier:
         diagnosis_keys = {self._pair_key(pair) for pair in diagnosis_pair_candidates}
         if len(diagnosis_keys) == 1 and review_key in diagnosis_keys:
             return diagnosis_pair_candidates, ""
+
+        if sub_job_only and len(diagnosis_pair_candidates) == 1:
+            diagnosis_pair = diagnosis_pair_candidates[0]
+            if normalize_cell(diagnosis_pair.get("중직무", "")).casefold() != normalize_cell(
+                review_pair.get("중직무", "")
+            ).casefold():
+                return diagnosis_pair_candidates, ""
+            return (
+                [review_pair],
+                f"{review_pair_reason}; diagnosis 중직무 '{diagnosis_pair['중직무']}'는 유지하고 "
+                f"self_review 소직무 단서로 소직무를 '{review_pair['소직무']}'로 보정",
+            )
 
         if review_key in diagnosis_keys:
             return (
@@ -1177,7 +1205,38 @@ class OpenAICompatibleJobClassifier:
                 scored.append((major_score + sub_score, pair))
 
         if not scored:
-            return pairs, ""
+            sub_scored: list[tuple[int, dict[str, str]]] = []
+            for pair in pairs:
+                if not _is_distinctive_stage1_signal(pair.get("소직무", "")):
+                    continue
+                sub_score = _sub_job_signal_score(pair.get("소직무", ""), review)
+                if sub_score:
+                    sub_scored.append((sub_score, pair))
+            if not sub_scored:
+                return pairs, ""
+            sub_scored.sort(key=lambda item: item[0], reverse=True)
+            top_score = sub_scored[0][0]
+            sub_winners = [pair for score, pair in sub_scored if score == top_score]
+            sub_keys = {
+                normalize_cell(pair.get("소직무", "")).casefold()
+                for pair in sub_winners
+            }
+            if len(sub_keys) != 1:
+                return pairs, ""
+            sub_job = normalize_cell(sub_winners[0].get("소직무", ""))
+            deduped_pairs: list[dict[str, str]] = []
+            seen_sub_pairs: set[tuple[str, str]] = set()
+            for pair in sub_winners:
+                key = self._pair_key(pair)
+                if key in seen_sub_pairs:
+                    continue
+                seen_sub_pairs.add(key)
+                deduped_pairs.append(dict(pair))
+            return (
+                deduped_pairs,
+                "self_review 소직무 직접 단서 우선 적용: "
+                f"소직무 '{sub_job}' 기준 stage1 후보 제한",
+            )
 
         scored.sort(key=lambda item: item[0], reverse=True)
         top_score = scored[0][0]
@@ -1571,7 +1630,7 @@ class OpenAICompatibleJobClassifier:
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
             "near_hard_knowledge_policy": "diagnosis_input_stage1_override_team_self_review_v11",
             "previous_year_prompt_policy": "fallback_only_when_current_review_short_v1",
-            "self_review_pair_priority_policy": "taxonomy_major_sub_signal_match_v3",
+            "self_review_pair_priority_policy": "taxonomy_major_sub_or_same_major_sub_signal_match_v4",
             "diagnosis_self_review_conflict_policy": "self_review_direct_pair_overrides_diagnosis_v1",
             "stage2_pair_recovery_policy": "reason_major_sub_match_v2",
             "dic_optional_unit_candidate_policy": "blank_unit_per_pair_device_v1",
@@ -1636,6 +1695,10 @@ def _reason_mentions_pair_path(reason: str, pair: dict[str, str]) -> bool:
         return True
 
     return _text_match_score(major_job, reason) > 0 and _text_match_score(sub_job, reason) > 0
+
+
+def _is_sub_job_only_review_reason(reason: str) -> bool:
+    return "self_review 소직무 직접 단서" in normalize_cell(reason)
 
 
 def _sub_job_signal_score(sub_job: object, review: str) -> int:

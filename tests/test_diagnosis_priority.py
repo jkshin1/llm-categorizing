@@ -376,6 +376,142 @@ def test_self_review_direct_pair_overrides_stale_diagnosis_pair() -> None:
     assert "명확히 충돌" in result["diagnosis_priority_reason"]
 
 
+def test_self_review_sub_job_only_can_correct_sub_job_within_diagnosis_major() -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "DIC",
+                "소직무": "SPICE Modeling",
+                "Device": "공통",
+                "단위 직무": "SPICE Modeling",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "DIC",
+                "소직무": "DTCO",
+                "Device": "NAND",
+                "단위 직무": "회로 최적화",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    classifier = _classifier(taxonomy)
+    diagnosis_context = DiagnosisContext(
+        year="2025",
+        emp_num="E0012",
+        row_count=1,
+        teams=[],
+        job_names=["SPICE Modeling"],
+        categories=[],
+        evidence_rows=[],
+    )
+
+    def fail_stage1(self, context_json, candidate_pairs=None):
+        raise AssertionError("self_review sub-job signal should correct within DIC before stage1")
+
+    def fixed_stage2(self, context_json, candidates):
+        assert {row["소직무"] for row in candidates} == {"DTCO"}
+        return FinalClassificationResult(
+            major_job="DIC",
+            sub_job="DTCO",
+            device="NAND",
+            unit_job="회로 최적화",
+            detail_job_1="",
+            detail_job_2="",
+            confidence=0.9,
+            needs_review=False,
+            reason="self_review의 DTCO 단서로 DIC 내 소직무 보정",
+        )
+
+    classifier._run_stage1 = MethodType(fail_stage1, classifier)
+    classifier._run_stage2 = MethodType(fixed_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2025",
+            "team": "",
+            "emp_num": "E0012",
+            "name": "홍길동",
+            "self_review": "DTCO 관점의 회로 최적화와 모델 correlation 업무를 수행",
+        },
+        diagnosis_context=diagnosis_context,
+    )
+
+    assert result["중직무"] == "DIC"
+    assert result["소직무"] == "DTCO"
+    assert "diagnosis 중직무 'DIC'는 유지" in result["diagnosis_priority_reason"]
+
+
+def test_self_review_sub_job_only_does_not_change_diagnosis_major_without_major_signal() -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "공정",
+                "소직무": "Etch공정",
+                "Device": "",
+                "단위 직무": "Etch",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "DIC",
+                "소직무": "OPC",
+                "Device": "",
+                "단위 직무": "OPC",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    classifier = _classifier(taxonomy)
+    diagnosis_context = DiagnosisContext(
+        year="2025",
+        emp_num="E0013",
+        row_count=1,
+        teams=[],
+        job_names=["Etch공정"],
+        categories=[],
+        evidence_rows=[],
+    )
+
+    def fail_stage1(self, context_json, candidate_pairs=None):
+        raise AssertionError("diagnosis pair should remain selected before stage1")
+
+    def fixed_stage2(self, context_json, candidates):
+        assert candidates == [taxonomy.rows[0]]
+        return FinalClassificationResult(
+            major_job="공정",
+            sub_job="Etch공정",
+            device="",
+            unit_job="Etch",
+            detail_job_1="",
+            detail_job_2="",
+            confidence=0.88,
+            needs_review=False,
+            reason="OPC 일부 언급만으로 공정 중직무를 DIC로 바꾸지 않음",
+        )
+
+    classifier._run_stage1 = MethodType(fail_stage1, classifier)
+    classifier._run_stage2 = MethodType(fixed_stage2, classifier)
+
+    result = classifier.classify_row(
+        {
+            "year": "2025",
+            "team": "",
+            "emp_num": "E0013",
+            "name": "홍길동",
+            "self_review": "OPC 조건 검토를 일부 수행했으나 Etch공정 개선 업무 중심",
+        },
+        diagnosis_context=diagnosis_context,
+    )
+
+    assert result["중직무"] == "공정"
+    assert result["소직무"] == "Etch공정"
+    assert "diagnosis 우선 적용" in result["diagnosis_priority_reason"]
+
+
 def test_diagnosis_job_name_takes_precedence_over_conflicting_near_hard_knowledge(tmp_path) -> None:
     taxonomy = Taxonomy.from_rows(
         [
