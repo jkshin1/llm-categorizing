@@ -651,6 +651,7 @@ class OpenAICompatibleJobClassifier:
             team_match
             and not job_name_match
             and self._team_override_conflicts_with_current_diagnosis(item, diagnosis_priority)
+            and not self._team_override_has_lower_level_diagnosis_support(item, diagnosis_job_names)
         ):
             return False
         return (
@@ -674,6 +675,37 @@ class OpenAICompatibleJobClassifier:
         if not target_major or not target_sub or not current_major or not current_sub:
             return False
         return current_major == target_major and current_sub != target_sub
+
+    def _team_override_has_lower_level_diagnosis_support(
+        self,
+        item: JobKnowledge,
+        diagnosis_job_names: list[str],
+    ) -> bool:
+        if not diagnosis_job_names:
+            return False
+        target = {
+            column: normalize_cell(value)
+            for column, value in taxonomy_target_from_knowledge(item).items()
+            if normalize_cell(value)
+        }
+        if not normalize_cell(target.get("중직무", "")) or not normalize_cell(target.get("소직무", "")):
+            return False
+        matched_rows = self._taxonomy_rows_matching(target)
+        if not matched_rows:
+            return False
+
+        lower_level_columns = ("단위 직무", "세부 직무1", "세부 직무2")
+        for row in matched_rows:
+            for column in lower_level_columns:
+                taxonomy_value = normalize_cell(row.get(column, ""))
+                if not taxonomy_value:
+                    continue
+                if any(
+                    _is_hard_diagnosis_match(_text_match_score(taxonomy_value, job_name))
+                    for job_name in diagnosis_job_names
+                ):
+                    return True
+        return False
 
     def _diagnosis_override_context(self, context_json: str) -> tuple[str, list[str], list[str]]:
         try:
@@ -1374,7 +1406,7 @@ class OpenAICompatibleJobClassifier:
             "confidence_review_threshold": self.config.confidence_review_threshold,
             "previous_year_min_current_review_chars": self.config.previous_year_min_current_review_chars,
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
-            "near_hard_knowledge_policy": "diagnosis_input_stage1_override_team_v7",
+            "near_hard_knowledge_policy": "diagnosis_input_stage1_override_team_v8",
             "previous_year_prompt_policy": "fallback_only_when_current_review_short_v1",
             "self_review_pair_priority_policy": "taxonomy_major_sub_signal_match_v3",
             "diagnosis_self_review_conflict_policy": "self_review_direct_pair_overrides_diagnosis_v1",
