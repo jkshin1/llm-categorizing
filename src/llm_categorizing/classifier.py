@@ -645,12 +645,13 @@ class OpenAICompatibleJobClassifier:
         )
         team_match = (
             "diagnosis_team" in item.match_fields
-            and self._knowledge_alias_matches_team(item, diagnosis_teams)
+            and self._knowledge_team_matches_item(item, diagnosis_teams)
         )
         if (
             team_match
             and not job_name_match
             and self._team_override_conflicts_with_current_diagnosis(item, diagnosis_priority)
+            and not self._team_override_explicitly_ignores_diagnosis_job_name(item)
             and not self._team_override_has_lower_level_diagnosis_support(item, diagnosis_job_names)
         ):
             return False
@@ -675,6 +676,60 @@ class OpenAICompatibleJobClassifier:
         if not target_major or not target_sub or not current_major or not current_sub:
             return False
         return current_major == target_major and current_sub != target_sub
+
+    def _team_override_explicitly_ignores_diagnosis_job_name(
+        self,
+        item: JobKnowledge,
+    ) -> bool:
+        text = normalize_cell(
+            " ".join([item.raw_text, item.title, item.applies_when, item.hint])
+        ).casefold()
+        compact = _compact_text(text)
+        references_diagnosis_job_name = any(
+            term in text
+            for term in [
+                "diagnosis_job_names",
+                "diagnosis_job_name",
+                "diagnosis job name",
+                "진단 직무명",
+                "진단 시 직무명",
+                "진단시 직무명",
+            ]
+        ) or any(
+            term in compact
+            for term in [
+                "diagnosisjobnames",
+                "diagnosisjobname",
+                "diagnosisjob",
+                "진단직무명",
+                "진단시직무명",
+            ]
+        )
+        if not references_diagnosis_job_name:
+            return False
+        return any(
+            term in text
+            for term in [
+                "절대 참고하지",
+                "참고하지 말",
+                "무시",
+                "상관없이",
+                "ignore",
+                "do not use",
+                "do not consider",
+                "never use",
+            ]
+        ) or any(
+            term in compact
+            for term in [
+                "절대참고하지",
+                "참고하지말",
+                "상관없이",
+                "donotuse",
+                "donotconsider",
+                "neveruse",
+            ]
+        )
 
     def _team_override_has_lower_level_diagnosis_support(
         self,
@@ -735,6 +790,23 @@ class OpenAICompatibleJobClassifier:
                 if _diagnosis_job_name_alias_matches(alias, value):
                     return True
         return False
+
+    def _knowledge_team_matches_item(self, item: JobKnowledge, teams: list[str]) -> bool:
+        if self._knowledge_alias_matches_team(item, teams):
+            return True
+        target_team_aliases = [
+            item.target_sub_job,
+            item.target_device,
+            item.target_unit_job,
+            item.target_detail_job_1,
+            item.target_detail_job_2,
+        ]
+        return any(
+            _diagnosis_team_alias_matches(alias, team)
+            for alias in target_team_aliases
+            for team in teams
+            if normalize_cell(alias) and normalize_cell(team)
+        )
 
     def _knowledge_alias_matches_team(self, item: JobKnowledge, teams: list[str]) -> bool:
         if not teams:
@@ -1406,7 +1478,7 @@ class OpenAICompatibleJobClassifier:
             "confidence_review_threshold": self.config.confidence_review_threshold,
             "previous_year_min_current_review_chars": self.config.previous_year_min_current_review_chars,
             "diagnosis_hard_match_policy": "exact_or_compact_exact_with_major_tiebreak_v2",
-            "near_hard_knowledge_policy": "diagnosis_input_stage1_override_team_v8",
+            "near_hard_knowledge_policy": "diagnosis_input_stage1_override_team_v9",
             "previous_year_prompt_policy": "fallback_only_when_current_review_short_v1",
             "self_review_pair_priority_policy": "taxonomy_major_sub_signal_match_v3",
             "diagnosis_self_review_conflict_policy": "self_review_direct_pair_overrides_diagnosis_v1",

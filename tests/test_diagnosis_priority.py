@@ -833,6 +833,77 @@ def test_near_hard_dtco_team_mapping_overrides_spice_modeling_diagnosis_sub_job(
     assert "diagnosis 직무명/team 보정으로 stage1 후보 제한" in result["knowledge_priority_reason"]
 
 
+def test_explicit_dtco_team_rule_ignores_conflicting_diagnosis_job_name(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "DIC",
+                "소직무": "DTCO",
+                "Device": "NAND",
+                "단위 직무": "회로 최적화",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+            {
+                "중직무": "DIC",
+                "소직무": "SPICE Modeling",
+                "Device": "공통",
+                "단위 직무": "SPICE Modeling",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            },
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    entry = store.add(
+        "diagnosis team에 DTCO가 포함되면 diagnosis_job_names은 절대 참고하지 말고 중직무는 DIC, 소직무는 DTCO를 우선판단한다.",
+        KnowledgeDraft(
+            title="DTCO team absolute rule",
+            aliases=["NoAlias"],
+            match_fields=["diagnosis_team"],
+            hint="diagnosis team에 DTCO가 있으면 diagnosis_job_names는 무시하고 DIC > DTCO를 우선한다.",
+            target_major_job="DIC",
+            target_sub_job="DTCO",
+        ),
+    )
+    updated = store.update_metadata(entry.id, enforcement_level="near_hard")
+    assert updated is not None
+    classifier = OpenAICompatibleJobClassifier(
+        settings=LLMSettings(
+            base_url="http://localhost:1/v1",
+            api_key="test",
+            model="test",
+        ),
+        taxonomy=taxonomy,
+        config=ClassificationConfig(),
+        knowledge_store=store,
+    )
+    diagnosis_context = DiagnosisContext(
+        year="2025",
+        emp_num="E0009",
+        row_count=1,
+        teams=["Device Tech Solution > DTCO"],
+        job_names=["SPICE Modeling"],
+        categories=[],
+        evidence_rows=[],
+    )
+    context_json = (
+        '{"year":"2025","diagnosis_context":'
+        '{"diagnosis_teams":["Device Tech Solution > DTCO"],'
+        '"diagnosis_job_names":["SPICE Modeling"]}}'
+    )
+
+    priority = classifier._near_hard_knowledge_priority(
+        [updated],
+        context_json,
+        diagnosis_priority=classifier._diagnosis_priority(diagnosis_context),
+    )
+    pair_candidates, reason = classifier._knowledge_stage1_override_candidates(priority)
+
+    assert pair_candidates == [{"중직무": "DIC", "소직무": "DTCO"}]
+    assert "diagnosis 직무명/team 보정으로 stage1 후보 제한" in reason
+
+
 def test_near_hard_legacy_mapping_requires_matching_diagnosis_job_name(tmp_path) -> None:
     taxonomy = Taxonomy.from_rows(
         [
