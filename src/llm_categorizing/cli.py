@@ -33,6 +33,7 @@ DEFAULT_INPUT_PATH = "data/input/employees.csv"
 DEFAULT_DIAGNOSIS_PATH = "data/input/diagnosis.csv"
 DEFAULT_TAXONOMY_PATH = "data/input/taxonomy.csv"
 DEFAULT_OUTPUT_PATH = "data/output/classified_jobs.csv"
+EMPTY_LLM_RESPONSE_ERROR_PREFIX = "classification_error: empty LLM response"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -160,42 +161,128 @@ def main(argv: list[str] | None = None) -> int:
         knowledge_store=knowledge_store,
     )
 
+    source_rows: list[dict[str, Any]] = []
     output_rows: list[dict[str, Any]] = []
     previous_results: dict[tuple[str, int], dict[str, Any]] = {}
     total = len(employees)
-    for index, raw_row in employees.iterrows():
+    for _, raw_row in employees.iterrows():
         row = {column: raw_row.get(column, "") for column in EMPLOYEE_COLUMNS}
-        diagnosis_context = diagnosis_contexts.get(diagnosis_key(row.get("year", ""), row.get("emp_num", "")))
-        employee_key = normalize_key(row.get("emp_num", ""))
-        year_number = parse_year_number(row.get("year", ""))
-        previous_year_context = None
-        if employee_key and year_number is not None:
-            previous_result = previous_results.get((employee_key, year_number - 1))
-            previous_year_context = build_previous_year_context(
-                year_number - 1,
-                previous_result,
-                min_confidence=args.confidence_review_threshold,
-            )
-
-        result = classifier.classify_row(
+        source_rows.append(row)
+        result = classify_row_with_context(
+            classifier,
             row,
-            diagnosis_context=diagnosis_context,
-            previous_year_context=previous_year_context,
+            diagnosis_contexts=diagnosis_contexts,
+            previous_results=previous_results,
+            min_confidence=args.confidence_review_threshold,
         )
         output_rows.append(build_output_row(row, result, args.include_self_review_output))
-        if employee_key and year_number is not None:
-            previous_results[(employee_key, year_number)] = result
 
         current = len(output_rows)
         if current == 1 or current == total or current % 10 == 0:
-            needs_review_count = sum(1 for item in output_rows if item.get("needs_review") is True)
+            needs_review_count = sum(
+                1 for item in output_rows if item.get("needs_review") is True
+            )
             print(f"Processed {current}/{total} rows, needs_review={needs_review_count}")
+
+    retry_empty_llm_response_rows(
+        source_rows=source_rows,
+        output_rows=output_rows,
+        classifier=classifier,
+        diagnosis_contexts=diagnosis_contexts,
+        previous_results=previous_results,
+        include_self_review_output=args.include_self_review_output,
+        min_confidence=args.confidence_review_threshold,
+    )
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(output_rows).to_csv(output_path, index=False, encoding="utf-8-sig")
     print(f"Wrote result CSV: {output_path}")
     return 0
+
+
+def classify_row_with_context(
+    classifier: OpenAICompatibleJobClassifier,
+    row: dict[str, Any],
+    *,
+    diagnosis_contexts: dict[tuple[str, str], Any],
+    previous_results: dict[tuple[str, int], dict[str, Any]],
+    min_confidence: float,
+) -> dict[str, Any]:
+    diagnosis_context = diagnosis_contexts.get(
+        diagnosis_key(row.get("year", ""), row.get("emp_num", ""))
+    )
+    employee_key = normalize_key(row.get("emp_num", ""))
+    year_number = parse_year_number(row.get("year", ""))
+    previous_year_context = None
+    if employee_key and year_number is not None:
+        previous_result = previous_results.get((employee_key, year_number - 1))
+        previous_year_context = build_previous_year_context(
+            year_number - 1,
+            previous_result,
+            min_confidence=min_confidence,
+        )
+
+    result = classifier.classify_row(
+        row,
+        diagnosis_context=diagnosis_context,
+        previous_year_context=previous_year_context,
+    )
+    if employee_key and year_number is not None:
+        previous_results[(employee_key, year_number)] = result
+    return result
+
+
+def retry_empty_llm_response_rows(
+    *,
+    source_rows: list[dict[str, Any]],
+    output_rows: list[dict[str, Any]],
+    classifier: OpenAICompatibleJobClassifier,
+    diagnosis_contexts: dict[tuple[str, str], Any],
+    previous_results: dict[tuple[str, int], dict[str, Any]],
+    include_self_review_output: bool,
+    min_confidence: float,
+) -> tuple[int, int]:
+    retry_indexes = [
+        index for index, row in enumerate(output_rows) if is_empty_llm_response_error(row)
+    ]
+    if not retry_indexes:
+        return (0, 0)
+
+    print(
+        f"Retrying {len(retry_indexes)} rows with empty LLM response errors "
+        "once after full pass"
+    )
+    classified_count = 0
+    for retry_position, row_index in enumerate(retry_indexes, start=1):
+        source_row = source_rows[row_index]
+        result = classify_row_with_context(
+            classifier,
+            source_row,
+            diagnosis_contexts=diagnosis_contexts,
+            previous_results=previous_results,
+            min_confidence=min_confidence,
+        )
+        output_row = build_output_row(source_row, result, include_self_review_output)
+        output_rows[row_index] = output_row
+        if not normalize_cell(output_row.get("error", "")):
+            classified_count += 1
+
+        if (
+            retry_position == 1
+            or retry_position == len(retry_indexes)
+            or retry_position % 10 == 0
+        ):
+            print(
+                f"Retried empty-response rows {retry_position}/{len(retry_indexes)}, "
+                f"classified={classified_count}"
+            )
+
+    return (len(retry_indexes), classified_count)
+
+
+def is_empty_llm_response_error(row: dict[str, Any]) -> bool:
+    return normalize_cell(row.get("error", "")).startswith(EMPTY_LLM_RESPONSE_ERROR_PREFIX)
 
 
 def build_output_row(

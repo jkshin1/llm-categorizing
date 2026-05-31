@@ -381,6 +381,8 @@ error,input_truncated,taxonomy_version,model_name,classified_at
 LLM_TIMEOUT_SECONDS=300
 ```
 
+전수 처리 후에는 `classification_error: empty LLM response`로 실패한 row만 한 번 더 재분류하고, 성공한 재시도 결과로 출력 CSV를 갱신합니다. 다른 오류나 이미 분류된 row는 후처리 재시도 대상이 아닙니다.
+
 기본 API 재시도 횟수는 5회입니다. 더 오래 기다려도 되는 배치 작업이면 실행 시 재시도를 늘릴 수 있습니다.
 
 ```bat
