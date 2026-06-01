@@ -672,3 +672,51 @@ def test_classifier_does_not_retrieve_knowledge_from_diagnosis_items(tmp_path) -
 
     assert knowledge_items == []
     assert hints == []
+
+
+def test_classifier_does_not_retrieve_knowledge_from_diagnosis_categories(tmp_path) -> None:
+    taxonomy = Taxonomy.from_rows(
+        [
+            {
+                "중직무": "A",
+                "소직무": "A1",
+                "Device": "",
+                "단위 직무": "Alpha",
+                "세부 직무1": "",
+                "세부 직무2": "",
+            }
+        ]
+    )
+    store = JobKnowledgeStore(tmp_path / "knowledge.sqlite3")
+    store.add(
+        "LeakOnlyCategory 표현은 A 후보 검토에 참고",
+        KnowledgeDraft(
+            title="diagnosis category 전용 지식",
+            aliases=["LeakOnlyCategory"],
+            match_fields=["diagnosis_category"],
+            hint="diagnosis category에 LeakOnlyCategory가 있으면 A 후보를 검토한다.",
+            target_major_job="A",
+            priority=80,
+            confidence=0.8,
+        ),
+    )
+    classifier = _classifier(taxonomy, store)
+    diagnosis_context = DiagnosisContext(
+        year="2025",
+        emp_num="E0001",
+        row_count=1,
+        teams=[],
+        job_names=[],
+        categories=["LeakOnlyCategory"],
+        evidence_rows=[],
+    )
+
+    knowledge_items = classifier._retrieve_knowledge("", diagnosis_context)
+    hints = classifier._build_classification_hints(
+        "",
+        diagnosis_context=diagnosis_context,
+        knowledge_items=knowledge_items,
+    )
+
+    assert knowledge_items == []
+    assert hints == []

@@ -1521,7 +1521,6 @@ class OpenAICompatibleJobClassifier:
             self_review=review,
             diagnosis_teams=tuple(diagnosis_context.teams if diagnosis_context else []),
             diagnosis_job_names=tuple(diagnosis_context.job_names if diagnosis_context else []),
-            diagnosis_categories=tuple(diagnosis_context.categories if diagnosis_context else []),
         )
         return self.knowledge_store.retrieve_for_context(
             context,
@@ -1533,7 +1532,6 @@ class OpenAICompatibleJobClassifier:
         fields = (
             diagnosis_context.teams
             + diagnosis_context.job_names
-            + diagnosis_context.categories
         )
         return " ".join(fields)
 

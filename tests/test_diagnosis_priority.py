@@ -1508,3 +1508,4 @@ def test_output_row_includes_diagnosis_priority_reason() -> None:
 
     assert output["diagnosis_priority_reason"] == "diagnosis 우선 적용"
     assert "diagnosis_items" not in output
+    assert "diagnosis_categories" not in output

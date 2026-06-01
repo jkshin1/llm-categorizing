@@ -28,7 +28,6 @@ class DiagnosisContext:
             {
                 "diagnosis_team": row.get("diagnosis_team", ""),
                 "diagnosis_job_name": row.get("diagnosis_job_name", ""),
-                "category": row.get("category", ""),
             }
             for row in self.evidence_rows
         ]
@@ -36,7 +35,6 @@ class DiagnosisContext:
             "row_count": self.row_count,
             "diagnosis_teams": self.teams,
             "diagnosis_job_names": self.job_names,
-            "categories": self.categories,
             "evidence_rows": [row for row in evidence_rows if any(row.values())],
         }
 
@@ -45,7 +43,6 @@ class DiagnosisContext:
             "diagnosis_row_count": self.row_count,
             "diagnosis_teams": " | ".join(self.teams),
             "diagnosis_job_names": " | ".join(self.job_names),
-            "diagnosis_categories": " | ".join(self.categories),
         }
 
 
@@ -93,7 +90,6 @@ def empty_diagnosis_output_payload() -> dict[str, Any]:
         "diagnosis_row_count": 0,
         "diagnosis_teams": "",
         "diagnosis_job_names": "",
-        "diagnosis_categories": "",
     }
 
 
@@ -114,12 +110,11 @@ def _unique_values(rows: list[dict[str, str]], column: str, limit: int) -> list[
 
 def _evidence_rows(rows: list[dict[str, str]], limit: int) -> list[dict[str, str]]:
     evidence: list[dict[str, str]] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple[str, str]] = set()
     for row in rows:
         item = {
             "diagnosis_team": row.get("team", ""),
             "diagnosis_job_name": row.get("진단 시 직무명", ""),
-            "category": row.get("Category", ""),
         }
         if not any(item.values()):
             continue

@@ -24,15 +24,20 @@ def test_load_diagnosis_contexts_groups_multiple_rows(tmp_path: Path) -> None:
     assert context.teams == ["DRAM공정 > DPC"]
     assert context.job_names == ["Etch공정"]
     assert context.categories == ["CLN", "MLM"]
-    assert len(context.evidence_rows) == 2
+    assert len(context.evidence_rows) == 1
 
     prompt_payload = context.to_prompt_payload()
     serialized_prompt_payload = json.dumps(prompt_payload, ensure_ascii=False)
 
     assert "items" not in prompt_payload
     assert "item" not in serialized_prompt_payload
+    assert "categories" not in prompt_payload
+    assert "category" not in serialized_prompt_payload
+    assert "CLN" not in serialized_prompt_payload
+    assert "MLM" not in serialized_prompt_payload
     assert "Chamber clean" not in serialized_prompt_payload
     assert "Via scheme" not in serialized_prompt_payload
+    assert "diagnosis_categories" not in context.to_output_payload()
 
 
 def test_diagnosis_prompt_payload_sanitizes_manual_evidence_items() -> None:
@@ -60,7 +65,7 @@ def test_diagnosis_prompt_payload_sanitizes_manual_evidence_items() -> None:
         {
             "diagnosis_team": "TeamA",
             "diagnosis_job_name": "JobA",
-            "category": "CategoryA",
         }
     ]
+    assert "CategoryA" not in serialized_payload
     assert "PromptLeakItem" not in serialized_payload
